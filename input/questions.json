@@ -1,0 +1,51 @@
+[
+  {
+    "id": "q1",
+    "question": "Sence iliskinizde en zor kisim hangisi? (Uzun bir soru olsun diye uzatiyorum: gunluk rutinde en cok ne zorlayici geliyor?)",
+    "a": {
+      "text": "Iletisim",
+      "image": "input_images/q1_a.png"
+    },
+    "b": {
+      "text": "Planlama",
+      "image": "input_images/q1_b.png"
+    }
+  },
+  {
+    "id": "q2",
+    "question": "Tatil planlarken hangisi senin icin daha onemli: spontane olmak mi, yoksa her seyi onceden planlamak mi?",
+    "a": {
+      "text": "Spontane",
+      "image": "input_images/q2_a.png"
+    },
+    "b": {
+      "text": "Planli",
+      "image": "input_images/q2_b.png"
+    }
+  },
+  {
+    "id": "q3",
+    "question": "Bir tartismada ilk kim adim atar? (Bu soruyu da biraz uzun yaziyorum ki satir kirilmasini gorelim.)",
+    "a": {
+      "text": "Ben",
+      "image": "input_images/q3_a.png"
+    },
+    "b": {
+      "text": "O",
+      "image": "input_images/q3_b.png"
+    }
+  },
+  {
+    "id": "q4",
+    "question": "Aksam yemeginde karar verirken hangisi daha baskin: canin ne isterse mi, yoksa daha saglikli olan mi?",
+    "a": {
+      "text": "Canim ne isterse",
+      "image": "input_images/q4_a.png"
+    },
+    "b": {
+      "text": "Daha saglikli",
+      "image": "input_images/q4_b.png"
+    }
+  }
+]
+
