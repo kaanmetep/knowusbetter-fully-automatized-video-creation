@@ -815,6 +815,7 @@ def main():
     mock_choice_b = ROOT / "secenek2.jpg"
     intro_mp4 = ROOT / "VIDEOGIRIS.mp4"
     ad_mp4 = ROOT / "VIDEOARAREKLAM.mp4"
+    outro_mp4 = None
     bgm_audio = None
     bgm_volume = 0.0
     ad_insert_after = [3]  # default: after Q3 (1-based)
@@ -823,6 +824,7 @@ def main():
             render_settings = json.loads(RENDER_SETTINGS_JSON.read_text(encoding="utf-8"))
             intro_raw = str(render_settings.get("intro_video", "")).strip()
             ad_raw = str(render_settings.get("ad_video", "")).strip()
+            outro_raw = str(render_settings.get("outro_video", "")).strip()
             bgm_raw = str(render_settings.get("bg_music", "")).strip()
             bgm_volume = float(render_settings.get("bg_music_volume", 0.25) or 0.0)
             ad_positions = render_settings.get("ad_insert_after", ad_insert_after)
@@ -835,6 +837,9 @@ def main():
             if ad_raw:
                 ad_candidate = Path(ad_raw)
                 ad_mp4 = ad_candidate if ad_candidate.is_absolute() else (ROOT / ad_candidate).resolve()
+            if outro_raw:
+                outro_candidate = Path(outro_raw)
+                outro_mp4 = outro_candidate if outro_candidate.is_absolute() else (ROOT / outro_candidate).resolve()
             if bgm_raw:
                 bgm_candidate = Path(bgm_raw)
                 bgm_audio = bgm_candidate if bgm_candidate.is_absolute() else (ROOT / bgm_candidate).resolve()
@@ -860,6 +865,12 @@ def main():
     if ad_mp4.exists():
         ad_norm = seg_dir / "_ad_norm.mp4"
         normalize_clip_to_standard(ad_mp4, ad_norm)
+
+    # Optional outro clip at the end
+    outro_norm = None
+    if outro_mp4 and outro_mp4.exists():
+        outro_norm = seg_dir / "_outro_norm.mp4"
+        normalize_clip_to_standard(outro_mp4, outro_norm)
 
     # Convert 1-based positions to 0-based indices of "after question idx"
     ad_after_zero_based = set([p - 1 for p in ad_insert_after if isinstance(p, int) and p - 1 >= 0])
@@ -938,6 +949,9 @@ def main():
         # Insert ad clip after selected questions (dynamic)
         if ad_norm and idx in ad_after_zero_based:
             seg_paths.append(ad_norm)
+
+    if outro_norm:
+        seg_paths.append(outro_norm)
 
     concat_list = seg_dir / "concat_list.txt"
     with concat_list.open("w", encoding="utf-8") as f:

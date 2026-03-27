@@ -21,7 +21,7 @@
       "image": "input_images/q2_a.jpg"
     },
     "b": {
-      "text": "Duygularını Bazen Saklarsa",
+      "text": "Duygularını Saklarsa",
       "image": "input_images/q2_b.jpg"
     },
     "voice_text": "",
@@ -54,5 +54,33 @@
     },
     "voice_text": "",
     "audio": "input_audio/q4.mp3"
+  },
+  {
+    "id": "q5",
+    "question": "Bir ilişkide daha önemli olan nedir: güvende hissetmek mi yoksa tutkulu hissetmek mi?",
+    "a": {
+      "text": "Güvende Hissetmek",
+      "image": "input_images/q5_a.jpg"
+    },
+    "b": {
+      "text": "Tutkulu Hissetmek",
+      "image": "input_images/q5_b.jpg"
+    },
+    "voice_text": "",
+    "audio": "input_audio/q5.mp3"
+  },
+  {
+    "id": "q6",
+    "question": "Bir ilişkide hangisi daha çok incitir: söylenmeyen beklentiler mi yoksa yerine getirilmeyen sözler mi?",
+    "a": {
+      "text": "Söylenmeyen Beklentiler",
+      "image": "input_images/q6_a.jpg"
+    },
+    "b": {
+      "text": "Yerine Getirilmeyen Sözler",
+      "image": "input_images/q6_b.jpg"
+    },
+    "voice_text": "",
+    "audio": "input_audio/q6.mp3"
   }
 ]

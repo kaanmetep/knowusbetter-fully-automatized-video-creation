@@ -64,13 +64,19 @@ st.set_page_config(page_title="Cift Video Builder", layout="wide")
 st.title("Cift Video Builder")
 st.caption("Soru, şık, görsel ve soru sesi (audio) dinamik yönetim paneli")
 
-questions = load_questions()
-render_settings = load_render_settings()
+if "questions_working" not in st.session_state:
+    st.session_state["questions_working"] = load_questions()
+if "render_settings_working" not in st.session_state:
+    st.session_state["render_settings_working"] = load_render_settings()
+
+questions = st.session_state["questions_working"]
+render_settings = st.session_state["render_settings_working"]
 
 with st.expander("Video Klip Ayarlari (Dinamik)", expanded=True):
     st.caption("Giris ve araya reklam videosunu buradan degistirebilirsin. Bossa default dosyalar kullanilir.")
     intro_current = render_settings.get("intro_video", "VIDEOGIRIS.mp4")
     ad_current = render_settings.get("ad_video", "VIDEOARAREKLAM.mp4")
+    outro_current = render_settings.get("outro_video", "")
     bgm_current = render_settings.get("bg_music", "")
     bgm_volume_current = float(render_settings.get("bg_music_volume", 0.25) or 0.0)
     bgm_volume_current = max(0.0, min(1.5, bgm_volume_current))
@@ -79,12 +85,15 @@ with st.expander("Video Klip Ayarlari (Dinamik)", expanded=True):
     intro_upload = st.file_uploader("Giris Videosu Yukle (mp4)", type=["mp4"], key="intro_video_upload")
     st.caption(f"Mevcut araya reklam videosu: {ad_current}")
     ad_upload = st.file_uploader("Araya Reklam Videosu Yukle (mp4)", type=["mp4"], key="ad_video_upload")
+    st.caption(f"Mevcut kapanis videosu: {outro_current if outro_current else 'yok'}")
+    outro_upload = st.file_uploader("Kapanis Videosu Yukle (mp4)", type=["mp4"], key="outro_video_upload")
     st.caption(f"Mevcut arka plan sarkisi: {bgm_current if bgm_current else 'yok'}")
     bgm_upload = st.file_uploader("Arka Plan Sarkisi Yukle (mp3/wav/m4a)", type=["mp3", "wav", "m4a"], key="bgm_upload")
     bgm_volume = st.slider("Arka Plan Sesi (volume)", min_value=0.0, max_value=1.5, value=bgm_volume_current, step=0.01)
 
     intro_path = intro_current
     ad_path = ad_current
+    outro_path = outro_current
     bgm_path = bgm_current
     # Reklam ekleme noktaları: Soru sayisina gore Q1->Q2 ... listesi
     total_q = max(1, len(questions))
@@ -103,6 +112,10 @@ with st.expander("Video Klip Ayarlari (Dinamik)", expanded=True):
         ad_target = INPUT_VIDEOS / "ad.mp4"
         save_uploaded_file(ad_upload, ad_target)
         ad_path = str(ad_target.relative_to(ROOT)).replace("\\", "/")
+    if outro_upload:
+        outro_target = INPUT_VIDEOS / "outro.mp4"
+        save_uploaded_file(outro_upload, outro_target)
+        outro_path = str(outro_target.relative_to(ROOT)).replace("\\", "/")
     if bgm_upload:
         ext = Path(bgm_upload.name).suffix.lower() or ".mp3"
         bgm_target = INPUT_AUDIO / f"bg_music{ext}"
@@ -112,6 +125,7 @@ with st.expander("Video Klip Ayarlari (Dinamik)", expanded=True):
     new_render_settings = {
         "intro_video": intro_path,
         "ad_video": ad_path,
+        "outro_video": outro_path,
         "ad_insert_after": selected_positions,
         "bg_music": bgm_path,
         "bg_music_volume": bgm_volume,
@@ -121,9 +135,11 @@ col_top_1, col_top_2, col_top_3 = st.columns([1, 1, 2])
 with col_top_1:
     if st.button("Yeni Soru Ekle"):
         questions.append(build_default_question(len(questions)))
+        st.session_state["questions_working"] = questions
 with col_top_2:
     if st.button("4 Ornek Soru Doldur (Hizli)"):
         questions = [build_default_question(i) for i in range(4)]
+        st.session_state["questions_working"] = questions
 with col_top_3:
     st.info(f"Toplam soru: {len(questions)}")
 
@@ -206,12 +222,16 @@ with col_save:
     if st.button("Kaydet (questions.json)"):
         save_questions(updated)
         save_render_settings(new_render_settings)
+        st.session_state["questions_working"] = updated
+        st.session_state["render_settings_working"] = new_render_settings
         st.success("Kaydedildi.")
 
 with col_render_mock:
     if st.button("Mock Render Baslat"):
         save_questions(updated)
         save_render_settings(new_render_settings)
+        st.session_state["questions_working"] = updated
+        st.session_state["render_settings_working"] = new_render_settings
         code, out, err = run_render(mock=True)
         if code == 0:
             st.success("Mock render tamamlandi. output/final_9x16.mp4 guncellendi.")
@@ -226,6 +246,8 @@ with col_render_real:
     if st.button("Gercek Render Baslat (ElevenLabs)"):
         save_questions(updated)
         save_render_settings(new_render_settings)
+        st.session_state["questions_working"] = updated
+        st.session_state["render_settings_working"] = new_render_settings
         code, out, err = run_render(mock=False)
         if code == 0:
             st.success("Gercek render tamamlandi. output/final_9x16.mp4 guncellendi.")
