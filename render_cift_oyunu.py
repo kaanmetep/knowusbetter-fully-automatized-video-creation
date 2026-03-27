@@ -33,15 +33,15 @@ CONFIG = {
     "background_image": "bg.png",
     "layout": {
         "timer": {"x": 120, "y": 90, "w": 840, "h": 22},
-        "question_box": {"x": 80, "y": 150, "w": 920, "h": 320},
+        "question_box": {"x": 80, "y": 220, "w": 920, "h": 320},
         "choices": {
             "a": {
-                "label_box": {"x": 180, "y": 470, "w": 720, "h": 95},
-                "image_box": {"x": 180, "y": 575, "w": 720, "h": 300},
+                "label_box": {"x": 180, "y": 540, "w": 720, "h": 95},
+                "image_box": {"x": 180, "y": 645, "w": 720, "h": 300},
             },
             "b": {
-                "label_box": {"x": 180, "y": 950, "w": 720, "h": 130},
-                "image_box": {"x": 180, "y": 1090, "w": 720, "h": 600},
+                "label_box": {"x": 180, "y": 1020, "w": 720, "h": 130},
+                "image_box": {"x": 180, "y": 1160, "w": 720, "h": 600},
             },
         },
     },
@@ -58,7 +58,7 @@ CONFIG = {
         "shadow_offset": (3, 3),
     },
     # Reveal choices slightly before the question audio fully ends.
-    "choices_lead_seconds": 0.9,
+    "choices_lead_seconds": 2.8,
     # Transition between questions (seconds). Set 0 to disable.
     "transition_seconds": 0.25,
     "transition_type": "fade",
