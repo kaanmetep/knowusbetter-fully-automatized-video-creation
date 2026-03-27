@@ -51,8 +51,8 @@ CONFIG = {
     "text_effects": {
         "fill": (255, 255, 255),
         "stroke_fill": (0, 0, 0),
-        "stroke_width_question": 8,
-        "stroke_width_choice": 7,
+        "stroke_width_question": 6,
+        "stroke_width_choice": 5,
         # 40-50% black shadow approximation over pastel background.
         "shadow_fill": (120, 100, 110),
         "shadow_offset": (3, 3),
@@ -67,6 +67,13 @@ CONFIG = {
     "ad_transition_seconds": 0.35,
     # Voice (question) audio gain
     "voice_gain_db": 6.0,
+    # Final AAC bitrate (higher = better quality, larger file size).
+    "audio_bitrate_kbps": 192,
+    # When user provides custom question audio (mp3/wav/etc), we don't know
+    # its loudness level; applying default gain can cause clipping.
+    # Set to 0.0 to keep the source as-is.
+    "custom_audio_gain_db": 0.0,
+    "font_family": "rubik",
     "elevenlabs": {
         "api_url": "https://api.elevenlabs.io/v1/text-to-speech/{voice_id}",
         "model_id_default": "eleven_multilingual_v2",
@@ -115,6 +122,8 @@ def concat_with_transitions(segment_paths, out_path: Path, transition_seconds: f
                 "libx264",
                 "-c:a",
                 "aac",
+                "-b:a",
+                f"{int(CONFIG.get('audio_bitrate_kbps', 192))}k",
                 "-pix_fmt",
                 "yuv420p",
                 str(out_path),
@@ -181,6 +190,8 @@ def concat_with_transitions(segment_paths, out_path: Path, transition_seconds: f
         "libx264",
         "-c:a",
         "aac",
+        "-b:a",
+        f"{int(CONFIG.get('audio_bitrate_kbps', 192))}k",
         "-pix_fmt",
         "yuv420p",
         str(out_path),
@@ -220,6 +231,8 @@ def normalize_clip_to_standard(in_path: Path, out_path: Path):
             "libx264",
             "-c:a",
             "aac",
+            "-b:a",
+            f"{int(CONFIG.get('audio_bitrate_kbps', 192))}k",
             "-pix_fmt",
             "yuv420p",
             "-shortest",
@@ -263,14 +276,32 @@ def add_background_music(video_in: Path, bgm_in: Path, video_out: Path, bgm_volu
             "copy",
             "-c:a",
             "aac",
+            "-b:a",
+            f"{int(CONFIG.get('audio_bitrate_kbps', 192))}k",
             str(video_out),
         ]
     )
 
 
-def get_font(size: int):
+def get_font(size: int, bold: bool = False):
+    font_family = str(CONFIG.get("font_family", "rubik")).strip().lower()
+    primary = []
+    if font_family == "brlns":
+        primary = [
+            ROOT / ("BRLNSB.TTF" if bold else "BRLNSR.TTF"),
+            ROOT / ("BRLNSR.TTF" if bold else "BRLNSB.TTF"),
+        ]
+    else:
+        primary = [
+            ROOT / "Rubik-VariableFont_wght.ttf",
+            ROOT / "Rubik-Italic-VariableFont_wght.ttf",
+        ]
+
     candidates = [
+        *primary,
         ROOT / "assets" / "fonts" / "font.ttf",
+        ROOT / ("BRLNSB.TTF" if bold else "BRLNSR.TTF"),
+        ROOT / ("BRLNSR.TTF" if bold else "BRLNSB.TTF"),
         ROOT / "Rubik-VariableFont_wght.ttf",
         ROOT / "Rubik-Italic-VariableFont_wght.ttf",
         Path(r"C:\Windows\Fonts\LuckiestGuy-Regular.ttf"),
@@ -649,6 +680,7 @@ def make_question_segment(
     out_mp4: Path,
     audio_dur: float,
     clock_mp3,
+    voice_gain_db: float,
 ):
     timer_seconds = float(CONFIG["timer_seconds"])
     w, h = CONFIG["w"], CONFIG["h"]
@@ -731,7 +763,6 @@ def make_question_segment(
     if clock_mp3 and clock_mp3.exists():
         offset_ms = int(round(start * 1000))
         # Clock'u timer window'u boyunca döndürüp question'ın bittiği ana delay’le.
-        voice_gain_db = float(CONFIG.get("voice_gain_db", 0.0))
         a_part = (
             f"[1:a]volume={voice_gain_db}dB,apad=pad_dur={timer_seconds},atrim=0:{total},aformat=channel_layouts=mono,aresample=44100[q];"
             f"[4:a]aformat=channel_layouts=mono,aresample=44100,atrim=start={clock_trim_seconds}:end={clock_window_end}[c];"
@@ -740,7 +771,6 @@ def make_question_segment(
         )
         filter_complex = f"{v_part};{a_part}"
     else:
-        voice_gain_db = float(CONFIG.get("voice_gain_db", 0.0))
         filter_complex = f"{v_part};[1:a]volume={voice_gain_db}dB,apad=pad_dur={timer_seconds},atrim=0:{total}[aud]"
 
     out_mp4.parent.mkdir(parents=True, exist_ok=True)
@@ -784,6 +814,8 @@ def make_question_segment(
             "yuv420p",
             "-c:a",
             "aac",
+            "-b:a",
+            f"{int(CONFIG.get('audio_bitrate_kbps', 192))}k",
             str(out_mp4),
         ]
     )
@@ -827,6 +859,9 @@ def main():
             outro_raw = str(render_settings.get("outro_video", "")).strip()
             bgm_raw = str(render_settings.get("bg_music", "")).strip()
             bgm_volume = float(render_settings.get("bg_music_volume", 0.25) or 0.0)
+            CONFIG["audio_bitrate_kbps"] = int(render_settings.get("audio_bitrate_kbps", CONFIG["audio_bitrate_kbps"]) or CONFIG["audio_bitrate_kbps"])
+            CONFIG["custom_audio_gain_db"] = float(render_settings.get("custom_audio_gain_db", CONFIG["custom_audio_gain_db"]) or CONFIG["custom_audio_gain_db"])
+            CONFIG["font_family"] = str(render_settings.get("font_family", CONFIG["font_family"]) or CONFIG["font_family"]).strip().lower()
             ad_positions = render_settings.get("ad_insert_after", ad_insert_after)
             if isinstance(ad_positions, list):
                 # sanitize to ints >=1
@@ -908,6 +943,7 @@ def main():
         if q_audio_path and not q_audio_path.is_absolute():
             q_audio_path = (ROOT / q_audio_path).resolve()
 
+        is_custom_audio = bool(q_audio_path and q_audio_path.exists())
         if q_audio_path and q_audio_path.exists():
             st = q_audio_path.stat()
             key = sha256_str(f"custom_audio|{q_audio_path.name}|{st.st_size}|{int(st.st_mtime)}")
@@ -943,7 +979,17 @@ def main():
         build_base_image(base_png, question_layer_png, choices_layer_png, question, a_text, b_text, a_img, b_img)
 
         out_mp4 = seg_dir / f"{qid}.mp4"
-        make_question_segment(base_png, question_layer_png, choices_layer_png, audio_wav, out_mp4, audio_dur, clock_mp3=clock_mp3)
+        voice_gain_db_for_question = float(CONFIG["custom_audio_gain_db"]) if is_custom_audio else float(CONFIG["voice_gain_db"])
+        make_question_segment(
+            base_png,
+            question_layer_png,
+            choices_layer_png,
+            audio_wav,
+            out_mp4,
+            audio_dur,
+            clock_mp3=clock_mp3,
+            voice_gain_db=voice_gain_db_for_question,
+        )
         seg_paths.append(out_mp4)
 
         # Insert ad clip after selected questions (dynamic)

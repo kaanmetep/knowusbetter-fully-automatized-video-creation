@@ -1,10 +1,11 @@
 {
-  "intro_video": "VIDEOGIRIS.mp4",
-  "ad_video": "VIDEOARAREKLAM.mp4",
+  "intro_video": "input_videos/intro.mp4",
+  "ad_video": "input_videos/ad.mp4",
   "outro_video": "input_videos/outro.mp4",
   "ad_insert_after": [
     3
   ],
   "bg_music": "input_audio/bg_music.mp3",
-  "bg_music_volume": 1.2
+  "bg_music_volume": 1.18,
+  "font_family": "rubik"
 }

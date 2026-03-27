@@ -1,1 +1,44 @@
-tmp
+## Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+## Virtual envs
+.venv/
+venv/
+ENV/
+env/
+
+## IDE / Editor
+.vscode/
+.idea/
+
+## OS
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+## Secrets
+.env
+.env.*
+
+## App outputs / caches (generated)
+output/
+render/segments/
+tmp/
+audio_cache/
+
+## Optional: ignore generated media broadly
+# *.mp4
+# *.wav
+# *.mp3
+# *.png
+# *.jpg
+# *.jpeg
+# *.webp
+# *.ttf

@@ -78,6 +78,7 @@ with st.expander("Video Klip Ayarlari (Dinamik)", expanded=True):
     ad_current = render_settings.get("ad_video", "VIDEOARAREKLAM.mp4")
     outro_current = render_settings.get("outro_video", "")
     bgm_current = render_settings.get("bg_music", "")
+    font_family_current = str(render_settings.get("font_family", "rubik") or "rubik").strip().lower()
     bgm_volume_current = float(render_settings.get("bg_music_volume", 0.25) or 0.0)
     bgm_volume_current = max(0.0, min(1.5, bgm_volume_current))
     ad_after_positions = render_settings.get("ad_insert_after", [3])
@@ -90,6 +91,11 @@ with st.expander("Video Klip Ayarlari (Dinamik)", expanded=True):
     st.caption(f"Mevcut arka plan sarkisi: {bgm_current if bgm_current else 'yok'}")
     bgm_upload = st.file_uploader("Arka Plan Sarkisi Yukle (mp3/wav/m4a)", type=["mp3", "wav", "m4a"], key="bgm_upload")
     bgm_volume = st.slider("Arka Plan Sesi (volume)", min_value=0.0, max_value=1.5, value=bgm_volume_current, step=0.01)
+    font_options = {"Rubik": "rubik", "BRLNS": "brlns"}
+    font_labels = list(font_options.keys())
+    default_font_label = "Rubik" if font_family_current != "brlns" else "BRLNS"
+    font_label = st.selectbox("Font Secimi", font_labels, index=font_labels.index(default_font_label))
+    font_family = font_options[font_label]
 
     intro_path = intro_current
     ad_path = ad_current
@@ -129,6 +135,7 @@ with st.expander("Video Klip Ayarlari (Dinamik)", expanded=True):
         "ad_insert_after": selected_positions,
         "bg_music": bgm_path,
         "bg_music_volume": bgm_volume,
+        "font_family": font_family,
     }
 
 col_top_1, col_top_2, col_top_3 = st.columns([1, 1, 2])
