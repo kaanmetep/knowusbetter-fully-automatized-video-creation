@@ -30,6 +30,19 @@ Mock (ElevenLabs olmadan) için ses dosyalarını repo ana dizinine koyabilirsin
 - `ses1.mp3`, `ses2.mp3` (soru sırasına göre 1.->ses1, 2.->ses2)
 - sonra `--mock-tts` ile çalıştır: `py render_cift_oyunu.py --mock-tts`
 
+## Lokal Arayuz (Dinamik Yonetim)
+Soru/sik/gorsel/soru-sesi eklemek icin:
+```powershell
+py -m pip install -r requirements.txt
+streamlit run ui_app.py
+```
+
+Arayuzden:
+- soru ekleyip/silebilirsin
+- A/B gorsel yukleyebilirsin
+- her soruya ayri audio (mp3/wav) yukleyebilirsin
+- mock veya gercek render baslatabilirsin
+
 Çıktı:
 - `output/final_9x16.mp4`
 

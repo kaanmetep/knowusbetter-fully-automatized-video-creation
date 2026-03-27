@@ -1,51 +1,58 @@
 [
   {
     "id": "q1",
-    "question": "Sence iliskinizde en zor kisim hangisi? (Uzun bir soru olsun diye uzatiyorum: gunluk rutinde en cok ne zorlayici geliyor?)",
+    "question": "İlişkide hangisi daha önemli: geçmiş mi gelecek mi?",
     "a": {
-      "text": "Iletisim",
-      "image": "input_images/q1_a.png"
+      "text": "Gelecek",
+      "image": "input_images/q1_a.jpg"
     },
     "b": {
-      "text": "Planlama",
-      "image": "input_images/q1_b.png"
-    }
+      "text": "Geçmiş",
+      "image": "input_images/q1_b.jpg"
+    },
+    "voice_text": "",
+    "audio": "input_audio/q1.mp3"
   },
   {
     "id": "q2",
-    "question": "Tatil planlarken hangisi senin icin daha onemli: spontane olmak mi, yoksa her seyi onceden planlamak mi?",
+    "question": "Hangisi seni daha çok rahatsız eder: sevgilin aşırı açık sözlü olursa mı, yoksa duygularını bazen saklarsa mı?",
     "a": {
-      "text": "Spontane",
-      "image": "input_images/q2_a.png"
+      "text": "Aşırı Açık Sözlü",
+      "image": "input_images/q2_a.jpg"
     },
     "b": {
-      "text": "Planli",
-      "image": "input_images/q2_b.png"
-    }
+      "text": "Duygularını Bazen Saklarsa",
+      "image": "input_images/q2_b.jpg"
+    },
+    "voice_text": "",
+    "audio": "input_audio/q2.mp3"
   },
   {
     "id": "q3",
-    "question": "Bir tartismada ilk kim adim atar? (Bu soruyu da biraz uzun yaziyorum ki satir kirilmasini gorelim.)",
+    "question": "Hangisi daha kötü: partnerinle müzik zevkinin uymaması mı, film zevkinin uymaması mı?",
     "a": {
-      "text": "Ben",
-      "image": "input_images/q3_a.png"
+      "text": "Müzik Zevkinin Uymaması",
+      "image": "input_images/q3_a.jpg"
     },
     "b": {
-      "text": "O",
-      "image": "input_images/q3_b.png"
-    }
+      "text": "Film Zevkinin Uymaması",
+      "image": "input_images/q3_b.webp"
+    },
+    "voice_text": "",
+    "audio": "input_audio/q3.mp3"
   },
   {
     "id": "q4",
-    "question": "Aksam yemeginde karar verirken hangisi daha baskin: canin ne isterse mi, yoksa daha saglikli olan mi?",
+    "question": "Giden olmak mı daha zor yoksa kalan olmak mı?",
     "a": {
-      "text": "Canim ne isterse",
-      "image": "input_images/q4_a.png"
+      "text": "Giden olmak",
+      "image": "input_images/q4_a.webp"
     },
     "b": {
-      "text": "Daha saglikli",
-      "image": "input_images/q4_b.png"
-    }
+      "text": "Kalan Olmak",
+      "image": "input_images/q4_b.jpg"
+    },
+    "voice_text": "",
+    "audio": "input_audio/q4.mp3"
   }
 ]
-

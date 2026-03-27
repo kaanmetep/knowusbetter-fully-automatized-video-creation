@@ -13,6 +13,7 @@ from PIL import ImageFilter
 
 
 ROOT = Path(__file__).resolve().parent
+RENDER_SETTINGS_JSON = ROOT / "input" / "render_settings.json"
 
 CONFIG = {
     "w": 1080,
@@ -223,6 +224,46 @@ def normalize_clip_to_standard(in_path: Path, out_path: Path):
             "yuv420p",
             "-shortest",
             str(out_path),
+        ]
+    )
+
+
+def add_background_music(video_in: Path, bgm_in: Path, video_out: Path, bgm_volume: float):
+    if (not bgm_in.exists()) or bgm_volume <= 0:
+        run(
+            [
+                "ffmpeg",
+                "-y",
+                "-i",
+                str(video_in),
+                "-c:v",
+                "copy",
+                "-c:a",
+                "copy",
+                str(video_out),
+            ]
+        )
+        return
+
+    run(
+        [
+            "ffmpeg",
+            "-y",
+            "-i",
+            str(video_in),
+            "-i",
+            str(bgm_in),
+            "-filter_complex",
+            f"[1:a]volume={bgm_volume}[bgm];[0:a][bgm]amix=inputs=2:duration=first:dropout_transition=0[a]",
+            "-map",
+            "0:v",
+            "-map",
+            "[a]",
+            "-c:v",
+            "copy",
+            "-c:a",
+            "aac",
+            str(video_out),
         ]
     )
 
@@ -515,6 +556,25 @@ def mock_mp3_to_wav(mock_mp3: Path, out_wav: Path):
     )
 
 
+def convert_any_audio_to_wav(in_audio: Path, out_wav: Path):
+    out_wav.parent.mkdir(parents=True, exist_ok=True)
+    run(
+        [
+            "ffmpeg",
+            "-y",
+            "-i",
+            str(in_audio),
+            "-ar",
+            "44100",
+            "-ac",
+            "1",
+            "-c:a",
+            "pcm_s16le",
+            str(out_wav),
+        ]
+    )
+
+
 def elevenlabs_tts_to_wav(
     voice_id: str,
     model_id: str,
@@ -755,6 +815,32 @@ def main():
     mock_choice_b = ROOT / "secenek2.jpg"
     intro_mp4 = ROOT / "VIDEOGIRIS.mp4"
     ad_mp4 = ROOT / "VIDEOARAREKLAM.mp4"
+    bgm_audio = None
+    bgm_volume = 0.0
+    ad_insert_after = [3]  # default: after Q3 (1-based)
+    if RENDER_SETTINGS_JSON.exists():
+        try:
+            render_settings = json.loads(RENDER_SETTINGS_JSON.read_text(encoding="utf-8"))
+            intro_raw = str(render_settings.get("intro_video", "")).strip()
+            ad_raw = str(render_settings.get("ad_video", "")).strip()
+            bgm_raw = str(render_settings.get("bg_music", "")).strip()
+            bgm_volume = float(render_settings.get("bg_music_volume", 0.25) or 0.0)
+            ad_positions = render_settings.get("ad_insert_after", ad_insert_after)
+            if isinstance(ad_positions, list):
+                # sanitize to ints >=1
+                ad_insert_after = [int(x) for x in ad_positions if str(x).isdigit() and int(x) >= 1]
+            if intro_raw:
+                intro_candidate = Path(intro_raw)
+                intro_mp4 = intro_candidate if intro_candidate.is_absolute() else (ROOT / intro_candidate).resolve()
+            if ad_raw:
+                ad_candidate = Path(ad_raw)
+                ad_mp4 = ad_candidate if ad_candidate.is_absolute() else (ROOT / ad_candidate).resolve()
+            if bgm_raw:
+                bgm_candidate = Path(bgm_raw)
+                bgm_audio = bgm_candidate if bgm_candidate.is_absolute() else (ROOT / bgm_candidate).resolve()
+        except Exception:
+            # Keep defaults if settings cannot be parsed.
+            pass
 
     audio_cache_dir.mkdir(parents=True, exist_ok=True)
     bases_dir.mkdir(parents=True, exist_ok=True)
@@ -769,6 +855,15 @@ def main():
         normalize_clip_to_standard(intro_mp4, intro_norm)
         seg_paths.append(intro_norm)
 
+    # Prepare normalized ad clip once if present
+    ad_norm = None
+    if ad_mp4.exists():
+        ad_norm = seg_dir / "_ad_norm.mp4"
+        normalize_clip_to_standard(ad_mp4, ad_norm)
+
+    # Convert 1-based positions to 0-based indices of "after question idx"
+    ad_after_zero_based = set([p - 1 for p in ad_insert_after if isinstance(p, int) and p - 1 >= 0])
+
     for idx, q in enumerate(questions):
         qid = q.get("id", f"q{idx+1}")
         question = q["question"].strip()
@@ -777,41 +872,57 @@ def main():
         a_text = a.get("text", "").strip()
         b_text = b.get("text", "").strip()
 
-        if args.mock_tts and mock_choice_a.exists() and mock_choice_b.exists():
+        a_img = Path(a.get("image", str(input_images_dir / f"{qid}_a.png")))
+        b_img = Path(b.get("image", str(input_images_dir / f"{qid}_b.png")))
+        if not a_img.is_absolute():
+            a_img = (ROOT / a_img).resolve()
+        if not b_img.is_absolute():
+            b_img = (ROOT / b_img).resolve()
+
+        # Fallback to repo-level mock images only if question-specific images do not exist.
+        if not a_img.exists() and mock_choice_a.exists():
             a_img = mock_choice_a
+        if not b_img.exists() and mock_choice_b.exists():
             b_img = mock_choice_b
-        else:
-            a_img = Path(a.get("image", str(input_images_dir / f"{qid}_a.png")))
-            b_img = Path(b.get("image", str(input_images_dir / f"{qid}_b.png")))
-            if not a_img.exists() and mock_choice_a.exists():
-                a_img = mock_choice_a
-            if not b_img.exists() and mock_choice_b.exists():
-                b_img = mock_choice_b
 
         voice_text = q.get("voice_text")
         if not voice_text:
             # Senaryoya göre sadece soruyu seslendireceğiz.
             voice_text = question
 
-        # For mock mode, allow using ses1.mp3 for all questions.
-        mock_mp3 = ROOT / "ses1.mp3" if args.mock_tts and (ROOT / "ses1.mp3").exists() else (ROOT / f"ses{idx+1}.mp3")
-        mock_tag = ""
-        if args.mock_tts:
-            if mock_mp3.exists():
-                st = mock_mp3.stat()
-                mock_tag = f"|mock:{mock_mp3.name}:{st.st_size}:{int(st.st_mtime)}"
-            else:
-                mock_tag = "|mock_missing"
-        key = sha256_str(voice_text + voice_id + model_id + mock_tag)
-        audio_wav = audio_cache_dir / f"{qid}_{key}.wav"
-        elevenlabs_tts_to_wav(
-            voice_id,
-            model_id,
-            voice_text,
-            audio_wav,
-            mock=args.mock_tts,
-            mock_mp3=mock_mp3,
-        )
+        # Optional per-question audio file support (mp3/wav/etc).
+        # If present, this takes priority over ElevenLabs/mock generation.
+        q_audio_raw = q.get("audio")
+        q_audio_path = Path(q_audio_raw) if q_audio_raw else None
+        if q_audio_path and not q_audio_path.is_absolute():
+            q_audio_path = (ROOT / q_audio_path).resolve()
+
+        if q_audio_path and q_audio_path.exists():
+            st = q_audio_path.stat()
+            key = sha256_str(f"custom_audio|{q_audio_path.name}|{st.st_size}|{int(st.st_mtime)}")
+            audio_wav = audio_cache_dir / f"{qid}_{key}.wav"
+            if not audio_wav.exists() or audio_wav.stat().st_size == 0:
+                convert_any_audio_to_wav(q_audio_path, audio_wav)
+        else:
+            # For mock mode, allow using ses1.mp3 for all questions.
+            mock_mp3 = ROOT / "ses1.mp3" if args.mock_tts and (ROOT / "ses1.mp3").exists() else (ROOT / f"ses{idx+1}.mp3")
+            mock_tag = ""
+            if args.mock_tts:
+                if mock_mp3.exists():
+                    st = mock_mp3.stat()
+                    mock_tag = f"|mock:{mock_mp3.name}:{st.st_size}:{int(st.st_mtime)}"
+                else:
+                    mock_tag = "|mock_missing"
+            key = sha256_str(voice_text + voice_id + model_id + mock_tag)
+            audio_wav = audio_cache_dir / f"{qid}_{key}.wav"
+            elevenlabs_tts_to_wav(
+                voice_id,
+                model_id,
+                voice_text,
+                audio_wav,
+                mock=args.mock_tts,
+                mock_mp3=mock_mp3,
+            )
 
         audio_dur = ffprobe_duration_seconds(audio_wav)
 
@@ -824,10 +935,8 @@ def main():
         make_question_segment(base_png, question_layer_png, choices_layer_png, audio_wav, out_mp4, audio_dur, clock_mp3=clock_mp3)
         seg_paths.append(out_mp4)
 
-        # Insert ad clip between question 3 and 4 (after finishing Q3)
-        if idx == 2 and ad_mp4.exists():
-            ad_norm = seg_dir / "_ad_norm.mp4"
-            normalize_clip_to_standard(ad_mp4, ad_norm)
+        # Insert ad clip after selected questions (dynamic)
+        if ad_norm and idx in ad_after_zero_based:
             seg_paths.append(ad_norm)
 
     concat_list = seg_dir / "concat_list.txt"
@@ -837,9 +946,11 @@ def main():
             f.write(f"file '{p.resolve().as_posix()}'\n")
 
     final_out = output_dir / "final_9x16.mp4"
+    final_no_bgm = output_dir / "final_9x16_no_bgm.mp4"
     transition_seconds = float(CONFIG.get("transition_seconds", 0.0))
     transition_type = str(CONFIG.get("transition_type", "fade"))
-    concat_with_transitions(seg_paths, final_out, transition_seconds, transition_type)
+    concat_with_transitions(seg_paths, final_no_bgm, transition_seconds, transition_type)
+    add_background_music(final_no_bgm, bgm_audio if bgm_audio else Path("__missing__"), final_out, bgm_volume)
     print(f"Wrote: {final_out}")
 
 
