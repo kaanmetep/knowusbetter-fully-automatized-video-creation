@@ -2,6 +2,8 @@
   {
     "id": "q1",
     "question": "İlişkide hangisi daha önemli: geçmiş mi gelecek mi?",
+    "voice_text": "",
+    "audio": "input_audio/q1.mp3",
     "a": {
       "text": "Gelecek",
       "image": "input_images/q1_a.jpg"
@@ -10,12 +12,13 @@
       "text": "Geçmiş",
       "image": "input_images/q1_b.jpg"
     },
-    "voice_text": "",
-    "audio": "input_audio/q1.mp3"
+    "image": "input_images/q1_image.png"
   },
   {
     "id": "q2",
     "question": "Hangisi seni daha çok rahatsız eder: sevgilin aşırı açık sözlü olursa mı, yoksa duygularını bazen saklarsa mı?",
+    "voice_text": "",
+    "audio": "input_audio/q2.mp3",
     "a": {
       "text": "Aşırı Açık Sözlü",
       "image": "input_images/q2_a.jpg"
@@ -24,63 +27,6 @@
       "text": "Duygularını Saklarsa",
       "image": "input_images/q2_b.jpg"
     },
-    "voice_text": "",
-    "audio": "input_audio/q2.mp3"
-  },
-  {
-    "id": "q3",
-    "question": "Hangisi daha kötü: partnerinle müzik zevkinin uymaması mı, film zevkinin uymaması mı?",
-    "a": {
-      "text": "Müzik Zevkinin Uymaması",
-      "image": "input_images/q3_a.jpg"
-    },
-    "b": {
-      "text": "Film Zevkinin Uymaması",
-      "image": "input_images/q3_b.webp"
-    },
-    "voice_text": "",
-    "audio": "input_audio/q3.mp3"
-  },
-  {
-    "id": "q4",
-    "question": "Giden olmak mı daha zor yoksa kalan olmak mı?",
-    "a": {
-      "text": "Giden olmak",
-      "image": "input_images/q4_a.webp"
-    },
-    "b": {
-      "text": "Kalan Olmak",
-      "image": "input_images/q4_b.jpg"
-    },
-    "voice_text": "",
-    "audio": "input_audio/q4.mp3"
-  },
-  {
-    "id": "q5",
-    "question": "Bir ilişkide daha önemli olan nedir: güvende hissetmek mi yoksa tutkulu hissetmek mi?",
-    "a": {
-      "text": "Güvende Hissetmek",
-      "image": "input_images/q5_a.jpg"
-    },
-    "b": {
-      "text": "Tutkulu Hissetmek",
-      "image": "input_images/q5_b.jpg"
-    },
-    "voice_text": "",
-    "audio": "input_audio/q5.mp3"
-  },
-  {
-    "id": "q6",
-    "question": "Bir ilişkide hangisi daha çok incitir: söylenmeyen beklentiler mi yoksa yerine getirilmeyen sözler mi?",
-    "a": {
-      "text": "Söylenmeyen Beklentiler",
-      "image": "input_images/q6_a.jpg"
-    },
-    "b": {
-      "text": "Yerine Getirilmeyen Sözler",
-      "image": "input_images/q6_b.jpg"
-    },
-    "voice_text": "",
-    "audio": "input_audio/q6.mp3"
+    "image": "input_images/q2_image.png"
   }
 ]

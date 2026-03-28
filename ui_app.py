@@ -11,6 +11,7 @@ RENDER_SETTINGS_JSON = ROOT / "input" / "render_settings.json"
 INPUT_IMAGES = ROOT / "input_images"
 INPUT_AUDIO = ROOT / "input_audio"
 INPUT_VIDEOS = ROOT / "input_videos"
+TRANSITION_SOUNDS = ROOT / "gecis_sounds"
 
 
 def load_questions():
@@ -47,6 +48,7 @@ def build_default_question(idx):
         "question": "",
         "a": {"text": "", "image": f"input_images/{qid}_a.png"},
         "b": {"text": "", "image": f"input_images/{qid}_b.png"},
+        "image": f"input_images/{qid}_image.png",
         "voice_text": "",
         "audio": "",
     }
@@ -79,6 +81,14 @@ with st.expander("Video Klip Ayarlari (Dinamik)", expanded=True):
     outro_current = render_settings.get("outro_video", "")
     bgm_current = render_settings.get("bg_music", "")
     font_family_current = str(render_settings.get("font_family", "rubik") or "rubik").strip().lower()
+    layout_type_current = str(render_settings.get("layout_type", "classic_2_choice") or "classic_2_choice").strip().lower()
+    timer_type_current = str(render_settings.get("timer_type", "classic_bar") or "classic_bar").strip().lower()
+    transition_type_current = str(render_settings.get("transition_type", "fade") or "fade").strip().lower()
+    question_entry_effect_current = str(render_settings.get("question_entry_effect", "fade") or "fade").strip().lower()
+    choices_entry_effect_current = str(render_settings.get("choices_entry_effect", "fade") or "fade").strip().lower()
+    transition_sound_current = str(render_settings.get("transition_sound", "") or "").strip()
+    transition_sound_volume_current = float(render_settings.get("transition_sound_volume", 0.35) or 0.35)
+    transition_sound_volume_current = max(0.0, min(2.0, transition_sound_volume_current))
     bgm_volume_current = float(render_settings.get("bg_music_volume", 0.25) or 0.0)
     bgm_volume_current = max(0.0, min(1.5, bgm_volume_current))
     ad_after_positions = render_settings.get("ad_insert_after", [3])
@@ -96,6 +106,67 @@ with st.expander("Video Klip Ayarlari (Dinamik)", expanded=True):
     default_font_label = "Rubik" if font_family_current != "brlns" else "BRLNS"
     font_label = st.selectbox("Font Secimi", font_labels, index=font_labels.index(default_font_label))
     font_family = font_options[font_label]
+    layout_options = {
+        "Klasik (Soru + 2 Sik + 2 Gorsel)": "classic_2_choice",
+        "Soru + Tek Gorsel (Ortali)": "single_image",
+    }
+    layout_labels = list(layout_options.keys())
+    default_layout_label = layout_labels[0]
+    if layout_type_current == "single_image":
+        default_layout_label = layout_labels[1]
+    layout_label = st.selectbox("Video Layout Tipi", layout_labels, index=layout_labels.index(default_layout_label))
+    layout_type = layout_options[layout_label]
+    timer_options = {
+        "Klasik Bar": "classic_bar",
+        "Geri Sayim + Dairesel Timer": "countdown_circle",
+    }
+    timer_labels = list(timer_options.keys())
+    default_timer_label = timer_labels[0] if timer_type_current != "countdown_circle" else timer_labels[1]
+    timer_label = st.selectbox("Timer Tipi", timer_labels, index=timer_labels.index(default_timer_label))
+    timer_type = timer_options[timer_label]
+    transition_options = {
+        "Fade (Mevcut)": "fade",
+        "Slide Left": "slideleft",
+    }
+    transition_labels = list(transition_options.keys())
+    default_transition_label = transition_labels[0] if transition_type_current != "slideleft" else transition_labels[1]
+    transition_label = st.selectbox("Sorular Arasi Animasyon", transition_labels, index=transition_labels.index(default_transition_label))
+    transition_type = transition_options[transition_label]
+    entry_options = {
+        "Fade (Mevcut)": "fade",
+        "Slide Left": "slideleft",
+    }
+    entry_labels = list(entry_options.keys())
+    default_q_entry_label = entry_labels[0] if question_entry_effect_current != "slideleft" else entry_labels[1]
+    default_c_entry_label = entry_labels[0] if choices_entry_effect_current != "slideleft" else entry_labels[1]
+    q_entry_label = st.selectbox("Soru Giris Efekti", entry_labels, index=entry_labels.index(default_q_entry_label))
+    c_entry_label = st.selectbox("Sik Giris Efekti", entry_labels, index=entry_labels.index(default_c_entry_label))
+    question_entry_effect = entry_options[q_entry_label]
+    choices_entry_effect = entry_options[c_entry_label]
+    sound_files = []
+    if TRANSITION_SOUNDS.exists():
+        for ext in ("*.mp3", "*.MP3", "*.wav", "*.WAV", "*.m4a", "*.M4A"):
+            sound_files.extend(list(TRANSITION_SOUNDS.glob(ext)))
+    sound_files = sorted({p.name for p in sound_files})
+    transition_sound_labels = ["Yok"] + sound_files
+    current_sound_name = Path(transition_sound_current).name if transition_sound_current else "Yok"
+    if current_sound_name not in transition_sound_labels:
+        current_sound_name = "Yok"
+    transition_sound_label = st.selectbox(
+        "Gecis Efekt Sesi (Soru -> Soru)",
+        transition_sound_labels,
+        index=transition_sound_labels.index(current_sound_name),
+    )
+    transition_sound_volume = st.slider(
+        "Gecis Efekt Sesi (volume)",
+        min_value=0.0,
+        max_value=2.0,
+        value=transition_sound_volume_current,
+        step=0.01,
+    )
+    transition_sound = ""
+    if transition_sound_label != "Yok":
+        transition_sound = f"gecis_sounds/{transition_sound_label}"
 
     intro_path = intro_current
     ad_path = ad_current
@@ -136,6 +207,13 @@ with st.expander("Video Klip Ayarlari (Dinamik)", expanded=True):
         "bg_music": bgm_path,
         "bg_music_volume": bgm_volume,
         "font_family": font_family,
+        "layout_type": layout_type,
+        "timer_type": timer_type,
+        "transition_type": transition_type,
+        "question_entry_effect": question_entry_effect,
+        "choices_entry_effect": choices_entry_effect,
+        "transition_sound": transition_sound,
+        "transition_sound_volume": transition_sound_volume,
     }
 
 col_top_1, col_top_2, col_top_3 = st.columns([1, 1, 2])
@@ -158,18 +236,39 @@ for i, q in enumerate(questions):
         delete_me = st.checkbox("Bu soruyu sil", key=f"del_{i}")
         new_id = st.text_input("ID", value=qid, key=f"id_{i}")
         new_question = st.text_area("Soru", value=q.get("question", ""), key=f"q_{i}", height=90)
-
-        c1, c2 = st.columns(2)
-        with c1:
-            a_text = st.text_input("A Sikki", value=q.get("a", {}).get("text", ""), key=f"a_text_{i}")
-            a_img_current = q.get("a", {}).get("image", f"input_images/{new_id}_a.png")
-            st.caption(f"Mevcut A gorsel: {a_img_current}")
-            a_img_upload = st.file_uploader("A Gorsel Yukle", type=["png", "jpg", "jpeg", "webp"], key=f"a_img_{i}")
-        with c2:
-            b_text = st.text_input("B Sikki", value=q.get("b", {}).get("text", ""), key=f"b_text_{i}")
-            b_img_current = q.get("b", {}).get("image", f"input_images/{new_id}_b.png")
-            st.caption(f"Mevcut B gorsel: {b_img_current}")
-            b_img_upload = st.file_uploader("B Gorsel Yukle", type=["png", "jpg", "jpeg", "webp"], key=f"b_img_{i}")
+        a_text = q.get("a", {}).get("text", "")
+        b_text = q.get("b", {}).get("text", "")
+        a_img_path = Path(q.get("a", {}).get("image", f"input_images/{new_id}_a.png"))
+        b_img_path = Path(q.get("b", {}).get("image", f"input_images/{new_id}_b.png"))
+        single_img_path = Path(q.get("image", f"input_images/{new_id}_image.png"))
+        if layout_type == "classic_2_choice":
+            c1, c2 = st.columns(2)
+            with c1:
+                a_text = st.text_input("A Sikki", value=a_text, key=f"a_text_{i}")
+                a_img_current = str(a_img_path).replace("\\", "/")
+                st.caption(f"Mevcut A gorsel: {a_img_current}")
+                a_img_upload = st.file_uploader("A Gorsel Yukle", type=["png", "jpg", "jpeg", "webp"], key=f"a_img_{i}")
+            with c2:
+                b_text = st.text_input("B Sikki", value=b_text, key=f"b_text_{i}")
+                b_img_current = str(b_img_path).replace("\\", "/")
+                st.caption(f"Mevcut B gorsel: {b_img_current}")
+                b_img_upload = st.file_uploader("B Gorsel Yukle", type=["png", "jpg", "jpeg", "webp"], key=f"b_img_{i}")
+            if a_img_upload:
+                ext = Path(a_img_upload.name).suffix.lower() or ".png"
+                a_img_path = Path(f"input_images/{new_id}_a{ext}")
+                save_uploaded_file(a_img_upload, ROOT / a_img_path)
+            if b_img_upload:
+                ext = Path(b_img_upload.name).suffix.lower() or ".png"
+                b_img_path = Path(f"input_images/{new_id}_b{ext}")
+                save_uploaded_file(b_img_upload, ROOT / b_img_path)
+        else:
+            single_img_current = str(single_img_path).replace("\\", "/")
+            st.caption(f"Mevcut tek gorsel: {single_img_current}")
+            single_img_upload = st.file_uploader("Tek Gorsel Yukle", type=["png", "jpg", "jpeg", "webp"], key=f"single_img_{i}")
+            if single_img_upload:
+                ext = Path(single_img_upload.name).suffix.lower() or ".png"
+                single_img_path = Path(f"input_images/{new_id}_image{ext}")
+                save_uploaded_file(single_img_upload, ROOT / single_img_path)
 
         v1, v2 = st.columns(2)
         with v1:
@@ -192,18 +291,6 @@ for i, q in enumerate(questions):
         if delete_me:
             continue
 
-        # Paths
-        a_img_path = Path(a_img_current)
-        b_img_path = Path(b_img_current)
-        if a_img_upload:
-            ext = Path(a_img_upload.name).suffix.lower() or ".png"
-            a_img_path = Path(f"input_images/{new_id}_a{ext}")
-            save_uploaded_file(a_img_upload, ROOT / a_img_path)
-        if b_img_upload:
-            ext = Path(b_img_upload.name).suffix.lower() or ".png"
-            b_img_path = Path(f"input_images/{new_id}_b{ext}")
-            save_uploaded_file(b_img_upload, ROOT / b_img_path)
-
         audio_path = audio_current
         if clear_audio:
             audio_path = ""
@@ -213,16 +300,16 @@ for i, q in enumerate(questions):
             save_uploaded_file(audio_upload, audio_target)
             audio_path = str(audio_target.relative_to(ROOT)).replace("\\", "/")
 
-        updated.append(
-            {
-                "id": new_id,
-                "question": new_question,
-                "a": {"text": a_text, "image": str(a_img_path).replace("\\", "/")},
-                "b": {"text": b_text, "image": str(b_img_path).replace("\\", "/")},
-                "voice_text": voice_text,
-                "audio": audio_path,
-            }
-        )
+        updated_q = {
+            "id": new_id,
+            "question": new_question,
+            "voice_text": voice_text,
+            "audio": audio_path,
+            "a": {"text": a_text, "image": str(a_img_path).replace("\\", "/")},
+            "b": {"text": b_text, "image": str(b_img_path).replace("\\", "/")},
+            "image": str(single_img_path).replace("\\", "/"),
+        }
+        updated.append(updated_q)
 
 col_save, col_render_mock, col_render_real = st.columns(3)
 with col_save:

@@ -33,6 +33,7 @@ render/segments/
 tmp/
 audio_cache/
 
+input_images/
 ## Optional: ignore generated media broadly
 # *.mp4
 # *.wav

@@ -6,6 +6,7 @@ import subprocess
 from pathlib import Path
 import random
 import math
+import re
 
 import requests
 from PIL import Image, ImageDraw, ImageFont
@@ -20,6 +21,15 @@ CONFIG = {
     "h": 1920,
     "fps": 30,
     "timer_seconds": 3.0,
+    "timer_type": "classic_bar",
+    "timer_countdown_start": 4,
+    "timer_circle_radius": 68,
+    "timer_circle_dot_size": 10,
+    "timer_circle_y_offset": 30,
+    "timer_circle_font_size": 66,
+    "question_entry_effect": "fade",
+    "choices_entry_effect": "fade",
+    "question_slide_seconds": 0.8,
     "colors": {
         "bg": (255, 200, 220),
         "card": (255, 255, 255),
@@ -34,6 +44,10 @@ CONFIG = {
     "layout": {
         "timer": {"x": 120, "y": 90, "w": 840, "h": 22},
         "question_box": {"x": 80, "y": 220, "w": 920, "h": 320},
+        "single_image": {
+            "question_box": {"x": 80, "y": 220, "w": 920, "h": 300},
+            "image_box": {"x": 220, "y": 600, "w": 640, "h": 700},
+        },
         "choices": {
             "a": {
                 "label_box": {"x": 180, "y": 540, "w": 720, "h": 95},
@@ -59,6 +73,10 @@ CONFIG = {
     },
     # Reveal choices slightly before the question audio fully ends.
     "choices_lead_seconds": 2.8,
+    "choices_slide_seconds": 0.35,
+    "choices_slide_px": 120,
+    "transition_sound": "",
+    "transition_sound_volume": 0.35,
     # Transition between questions (seconds). Set 0 to disable.
     "transition_seconds": 0.25,
     "transition_type": "fade",
@@ -66,7 +84,7 @@ CONFIG = {
     "ad_transition_type": "slideleft",
     "ad_transition_seconds": 0.35,
     # Voice (question) audio gain
-    "voice_gain_db": 6.0,
+    "voice_gain_db": 7.0,
     # Final AAC bitrate (higher = better quality, larger file size).
     "audio_bitrate_kbps": 192,
     # When user provides custom question audio (mp3/wav/etc), we don't know
@@ -129,7 +147,7 @@ def concat_with_transitions(segment_paths, out_path: Path, transition_seconds: f
                 str(out_path),
             ]
         )
-        return
+        return []
 
     durs = [ffprobe_duration_seconds(Path(p)) for p in segment_paths]
 
@@ -148,6 +166,7 @@ def concat_with_transitions(segment_paths, out_path: Path, transition_seconds: f
     current_timeline = durs[0]
     ad_transition_type = str(CONFIG.get("ad_transition_type", "slideleft"))
     ad_transition_seconds = float(CONFIG.get("ad_transition_seconds", transition_seconds))
+    q_to_q_offsets = []
 
     for i in range(1, len(segment_paths)):
         nxt_v = f"v{i}"
@@ -171,6 +190,8 @@ def concat_with_transitions(segment_paths, out_path: Path, transition_seconds: f
 
         fc.append(f"[{cur_v}][{nxt_v}]xfade=transition={t_type}:duration={t_dur}:offset={off}[{out_v}]")
         fc.append(f"[{cur_a}][{nxt_a}]acrossfade=d={t_dur}[{out_a}]")
+        if re.fullmatch(r"q\d+\.mp4", left_name) and re.fullmatch(r"q\d+\.mp4", right_name):
+            q_to_q_offsets.append(off)
         cur_v = out_v
         cur_a = out_a
         current_timeline = current_timeline + durs[i] - t_dur
@@ -197,6 +218,7 @@ def concat_with_transitions(segment_paths, out_path: Path, transition_seconds: f
         str(out_path),
     ]
     run(cmd)
+    return q_to_q_offsets
 
 
 def normalize_clip_to_standard(in_path: Path, out_path: Path):
@@ -283,6 +305,62 @@ def add_background_music(video_in: Path, bgm_in: Path, video_out: Path, bgm_volu
     )
 
 
+def add_transition_sfx(video_in: Path, sfx_in: Path, video_out: Path, trigger_offsets, sfx_volume: float):
+    if (not sfx_in.exists()) or sfx_volume <= 0 or (not trigger_offsets):
+        run(
+            [
+                "ffmpeg",
+                "-y",
+                "-i",
+                str(video_in),
+                "-c:v",
+                "copy",
+                "-c:a",
+                "copy",
+                str(video_out),
+            ]
+        )
+        return
+
+    offsets = [max(0.0, float(x)) for x in trigger_offsets]
+    n = len(offsets)
+    split_labels = [f"sfx{i}" for i in range(n)]
+    delayed_labels = [f"sfxd{i}" for i in range(n)]
+
+    fc = [
+        f"[1:a]aformat=sample_rates=44100:channel_layouts=mono,volume={sfx_volume},asplit={n}" + "".join([f"[{lbl}]" for lbl in split_labels])
+    ]
+    for i, off in enumerate(offsets):
+        ms = int(round(off * 1000))
+        fc.append(f"[{split_labels[i]}]adelay={ms}|{ms}[{delayed_labels[i]}]")
+    mix_inputs = "[0:a]" + "".join([f"[{lbl}]" for lbl in delayed_labels])
+    fc.append(f"{mix_inputs}amix=inputs={n + 1}:duration=first:dropout_transition=0[a]")
+
+    run(
+        [
+            "ffmpeg",
+            "-y",
+            "-i",
+            str(video_in),
+            "-i",
+            str(sfx_in),
+            "-filter_complex",
+            ";".join(fc),
+            "-map",
+            "0:v",
+            "-map",
+            "[a]",
+            "-c:v",
+            "copy",
+            "-c:a",
+            "aac",
+            "-b:a",
+            f"{int(CONFIG.get('audio_bitrate_kbps', 192))}k",
+            str(video_out),
+        ]
+    )
+
+
 def get_font(size: int, bold: bool = False):
     font_family = str(CONFIG.get("font_family", "rubik")).strip().lower()
     primary = []
@@ -326,6 +404,29 @@ def get_font(size: int, bold: bool = False):
         except Exception:
             continue
     return ImageFont.load_default()
+
+
+def get_ffmpeg_fontfile() -> str:
+    font_family = str(CONFIG.get("font_family", "rubik")).strip().lower()
+    candidates = []
+    if font_family == "brlns":
+        candidates.extend([ROOT / "BRLNSB.TTF", ROOT / "BRLNSR.TTF"])
+    else:
+        candidates.extend([ROOT / "Rubik-VariableFont_wght.ttf", ROOT / "Rubik-Italic-VariableFont_wght.ttf"])
+    candidates.extend(
+        [
+            ROOT / "BRLNSB.TTF",
+            ROOT / "BRLNSR.TTF",
+            ROOT / "Rubik-VariableFont_wght.ttf",
+            ROOT / "Rubik-Italic-VariableFont_wght.ttf",
+            Path(r"C:\Windows\Fonts\arialbd.ttf"),
+            Path(r"C:\Windows\Fonts\arial.ttf"),
+        ]
+    )
+    for p in candidates:
+        if p.exists():
+            return str(p).replace("\\", "/").replace(":", "\\:")
+    return "Arial"
 
 
 def wrap_text(draw: ImageDraw.ImageDraw, font: ImageFont.ImageFont, text: str, max_width: int):
@@ -449,10 +550,12 @@ def build_base_image(
     question_layer_png: Path,
     choices_layer_png: Path,
     question: str,
+    layout_type: str,
     a_text: str,
     b_text: str,
     a_img: Path,
     b_img: Path,
+    single_img: Path,
 ):
     w, h = CONFIG["w"], CONFIG["h"]
     img = make_minimal_background()
@@ -466,11 +569,18 @@ def build_base_image(
     font_c = get_font(48)
     font_label = get_font(44)
 
-    q = CONFIG["layout"]["question_box"]
+    question_box = CONFIG["layout"]["question_box"]
+    if layout_type == "single_image":
+        question_box = CONFIG["layout"]["single_image"]["question_box"]
     draw_wrapped(
         qdraw,
         font_q,
-        (q["x"], q["y"], q["x"] + q["w"], q["y"] + q["h"]),
+        (
+            question_box["x"],
+            question_box["y"],
+            question_box["x"] + question_box["w"],
+            question_box["y"] + question_box["h"],
+        ),
         question,
         CONFIG["colors"]["text"],
         align="center",
@@ -480,17 +590,6 @@ def build_base_image(
         shadow_fill=CONFIG["text_effects"]["shadow_fill"],
         shadow_offset=CONFIG["text_effects"]["shadow_offset"],
     )
-
-    # Choices are rendered into a single transparent layer so we can reveal them together.
-    choices_layer = Image.new("RGBA", (w, h), (0, 0, 0, 0))
-    cdv = ImageDraw.Draw(choices_layer)
-
-    choices = CONFIG["layout"]["choices"]
-    a_choice = choices["a"]
-    b_choice = choices["b"]
-
-    font_choice_a = get_font(52)
-    font_choice_b = get_font(56)
 
     def render_choice_text(draw_obj, choice, letter: str, text: str, font):
         lb = choice["label_box"]
@@ -516,7 +615,9 @@ def build_base_image(
         ih = int(ib["h"])
         ensure_placeholder_image(img_path, (iw, ih), letter)
 
-        im = Image.open(img_path).convert("RGB")
+        source = Image.open(img_path).convert("RGBA")
+        bg = Image.new("RGBA", source.size, (*CONFIG["colors"]["bg"], 255))
+        im = Image.alpha_composite(bg, source).convert("RGB")
         im_w, im_h = im.size
         # Kutuya "cover" gibi oturt: oran bozulmasın, merkezden kırpılsın.
         scale = max(iw / im_w, ih / im_h)
@@ -528,10 +629,30 @@ def build_base_image(
         im = im.crop((left, top, left + iw, top + ih))
         layer_img.paste(im, (int(ib["x"]), int(ib["y"])))
 
-    render_choice_text(cdv, a_choice, "A", a_text, font_choice_a)
-    render_choice_image(choices_layer, a_choice, "A", a_img)
-    render_choice_text(cdv, b_choice, "B", b_text, font_choice_b)
-    render_choice_image(choices_layer, b_choice, "B", b_img)
+    # Choices are rendered into a single transparent layer so we can reveal them together.
+    choices_layer = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    cdv = ImageDraw.Draw(choices_layer)
+
+    if layout_type == "single_image":
+        single_choice = CONFIG["layout"]["single_image"]["image_box"]
+        render_choice_image(
+            choices_layer,
+            {"image_box": single_choice},
+            "",
+            single_img,
+        )
+    else:
+        choices = CONFIG["layout"]["choices"]
+        a_choice = choices["a"]
+        b_choice = choices["b"]
+
+        font_choice_a = get_font(52)
+        font_choice_b = get_font(56)
+
+        render_choice_text(cdv, a_choice, "A", a_text, font_choice_a)
+        render_choice_image(choices_layer, a_choice, "A", a_img)
+        render_choice_text(cdv, b_choice, "B", b_text, font_choice_b)
+        render_choice_image(choices_layer, b_choice, "B", b_img)
 
     out_png.parent.mkdir(parents=True, exist_ok=True)
     img.save(out_png)
@@ -686,6 +807,7 @@ def make_question_segment(
     w, h = CONFIG["w"], CONFIG["h"]
     fps = int(CONFIG["fps"])
     bar = CONFIG["layout"]["timer"]
+    timer_type = str(CONFIG.get("timer_type", "classic_bar") or "classic_bar").strip().lower()
 
     start = float(audio_dur)
     end = start + timer_seconds
@@ -707,8 +829,9 @@ def make_question_segment(
 
     bar_w = bar["w"]
     question_fade_d = float(CONFIG.get("question_fade_seconds", 0.45))
-    question_slide_d = float(CONFIG.get("question_slide_seconds", 0.45))
-    question_slide_px = float(CONFIG.get("question_slide_px", 18))
+    question_slide_d = float(CONFIG.get("question_slide_seconds", 0.8))
+    question_slide_px = float(CONFIG.get("question_slide_px", 140))
+    question_entry_effect = str(CONFIG.get("question_entry_effect", "fade") or "fade").strip().lower()
     # Timer bar:
     # - t=0..start: dolgu 0
     # - t=start..end: dolgu genişliği lineer artsın
@@ -721,42 +844,84 @@ def make_question_segment(
     max_steps = int(CONFIG.get("timer_max_steps", 200))
     steps = max(10, min(computed_steps, max_steps))
     step = timer_seconds / steps
-    vfilters = [
-        # Track background
-        f"drawbox=x={bar['x']}:y={bar['y']}:w={bar_w}:h={bar['h']}:color={track_hex}:thickness=fill:enable='between(t,{start:.6f},{end:.6f})'",
-        # Outer border to make the bar feel more premium
-        f"drawbox=x={bar['x']}:y={bar['y']}:w={bar_w}:h={bar['h']}:color={border_hex}:thickness=2:enable='between(t,{start:.6f},{end:.6f})'",
-    ]
-    epsilon = 1.0 / max(100000.0, steps * fps)
-    for i in range(steps):
-        t0 = start + i * step
-        t1 = start + (i + 1) * step
-        # Ters animasyon: başta dolu, sona doğru boşalıyor.
-        # Son adımda tam boş görünsün diye 0'a sabitliyoruz.
-        fill_w = bar_w * max(0.0, (steps - i - 1) / steps)
-        vfilters.append(
-            f"drawbox=x={bar['x']}:y={bar['y']}:w={fill_w:.3f}:h={bar['h']}:color={fill_hex}:thickness=fill:enable='between(t,{t0:.4f},{t1 + epsilon:.4f})'"
+    vfilters = []
+    if timer_type == "countdown_circle":
+        cx = int(bar["x"] + (bar["w"] / 2))
+        cy = int(bar["y"] + (bar["h"] / 2) + int(CONFIG.get("timer_circle_y_offset", 0)))
+        radius = int(CONFIG.get("timer_circle_radius", 60))
+        dot_size = int(CONFIG.get("timer_circle_dot_size", 9))
+        ring_segments = int(CONFIG.get("timer_circle_segments", 72))
+        epsilon = 1.0 / max(100000.0, ring_segments * fps)
+        for i in range(ring_segments):
+            angle = (-math.pi / 2.0) + ((2.0 * math.pi) * (i / ring_segments))
+            px = int(round(cx + radius * math.cos(angle) - (dot_size / 2)))
+            py = int(round(cy + radius * math.sin(angle) - (dot_size / 2)))
+            vfilters.append(
+                f"drawbox=x={px}:y={py}:w={dot_size}:h={dot_size}:color={track_hex}:thickness=fill:enable='between(t,{start:.6f},{end:.6f})'"
+            )
+            t1 = start + timer_seconds * ((i + 1) / ring_segments)
+            vfilters.append(
+                f"drawbox=x={px}:y={py}:w={dot_size}:h={dot_size}:color={fill_hex}:thickness=fill:enable='between(t,{start:.6f},{t1 + epsilon:.6f})'"
+            )
+        countdown_start = int(CONFIG.get("timer_countdown_start", 4))
+        countdown_start = max(1, countdown_start)
+        slice_d = timer_seconds / countdown_start
+        ff_font = get_ffmpeg_fontfile()
+        font_size = int(CONFIG.get("timer_circle_font_size", 66))
+        for n in range(countdown_start, 0, -1):
+            idx = countdown_start - n
+            t0 = start + (idx * slice_d)
+            t1 = end if n == 1 else (start + ((idx + 1) * slice_d))
+            vfilters.append(
+                f"drawtext=fontfile='{ff_font}':text='{n}':x=(w-text_w)/2:y={cy - int(font_size * 0.42)}:fontsize={font_size}:fontcolor={border_hex}:borderw=2:bordercolor=black:enable='between(t,{t0:.6f},{t1:.6f})'"
+            )
+    else:
+        vfilters.extend(
+            [
+                f"drawbox=x={bar['x']}:y={bar['y']}:w={bar_w}:h={bar['h']}:color={track_hex}:thickness=fill:enable='between(t,{start:.6f},{end:.6f})'",
+                f"drawbox=x={bar['x']}:y={bar['y']}:w={bar_w}:h={bar['h']}:color={border_hex}:thickness=2:enable='between(t,{start:.6f},{end:.6f})'",
+            ]
         )
+        epsilon = 1.0 / max(100000.0, steps * fps)
+        for i in range(steps):
+            t0 = start + i * step
+            t1 = start + (i + 1) * step
+            fill_w = bar_w * max(0.0, (steps - i - 1) / steps)
+            vfilters.append(
+                f"drawbox=x={bar['x']}:y={bar['y']}:w={fill_w:.3f}:h={bar['h']}:color={fill_hex}:thickness=fill:enable='between(t,{t0:.4f},{t1 + epsilon:.4f})'"
+            )
 
     timer_part = f"[0:v]{','.join(vfilters)}[timer];"
     question_part = (
         f"[2:v]format=rgba,"
         f"fade=t=in:st=0:d={question_fade_d}:alpha=1[qn];"
     )
-    # Slide up slightly while fading in.
-    # Avoid "if(...,...,...)" because commas can break filtergraph parsing on Windows strings.
-    # Use lte(...) and escape comma as `\,` to avoid breaking filtergraph parsing.
-    slide_expr = f"lte(t\\,{question_slide_d})*({question_slide_d}-t)/{question_slide_d}*{question_slide_px}"
-    overlay_part = f"[timer][qn]overlay=x=0:y={slide_expr}:format=auto[qtv];"
+    if question_entry_effect == "slideleft":
+        qx_expr = f"lte(t\\,{question_slide_d})*({question_slide_d}-t)/{question_slide_d}*(-{question_slide_px})"
+        overlay_part = f"[timer][qn]overlay=x={qx_expr}:y=0:format=auto[qtv];"
+    else:
+        slide_expr = f"lte(t\\,{question_slide_d})*({question_slide_d}-t)/{question_slide_d}*18"
+        overlay_part = f"[timer][qn]overlay=x=0:y={slide_expr}:format=auto[qtv];"
 
     choices_fade_d = float(CONFIG.get("choices_fade_seconds", 0.35))
     choices_lead = float(CONFIG.get("choices_lead_seconds", 0.25))
     choices_start = max(0.0, start - choices_lead)
+    choices_entry_effect = str(CONFIG.get("choices_entry_effect", "fade") or "fade").strip().lower()
+    choices_slide_d = float(CONFIG.get("choices_slide_seconds", choices_fade_d))
+    choices_slide_px = float(CONFIG.get("choices_slide_px", 120))
     choices_part = (
         f"[3:v]format=rgba,"
         f"fade=t=in:st={choices_start}:d={choices_fade_d}:alpha=1[cn];"
     )
-    overlay_part2 = f"[qtv][cn]overlay=x=0:y=0:format=auto[vid]"
+    if choices_entry_effect == "slideleft":
+        choices_end = choices_start + choices_slide_d
+        cx_expr = (
+            f"(-{choices_slide_px})*lte(t\\,{choices_start})+"
+            f"(-{choices_slide_px}+{choices_slide_px}*(t-{choices_start})/{choices_slide_d})*gte(t\\,{choices_start})*lte(t\\,{choices_end})"
+        )
+        overlay_part2 = f"[qtv][cn]overlay=x={cx_expr}:y=0:format=auto[vid]"
+    else:
+        overlay_part2 = f"[qtv][cn]overlay=x=0:y=0:format=auto[vid]"
 
     v_part = f"{timer_part}{question_part}{overlay_part}{choices_part}{overlay_part2}"
 
@@ -850,7 +1015,10 @@ def main():
     outro_mp4 = None
     bgm_audio = None
     bgm_volume = 0.0
+    transition_sfx = None
+    transition_sfx_volume = float(CONFIG.get("transition_sound_volume", 0.35))
     ad_insert_after = [3]  # default: after Q3 (1-based)
+    layout_type = "classic_2_choice"
     if RENDER_SETTINGS_JSON.exists():
         try:
             render_settings = json.loads(RENDER_SETTINGS_JSON.read_text(encoding="utf-8"))
@@ -858,10 +1026,27 @@ def main():
             ad_raw = str(render_settings.get("ad_video", "")).strip()
             outro_raw = str(render_settings.get("outro_video", "")).strip()
             bgm_raw = str(render_settings.get("bg_music", "")).strip()
+            transition_sfx_raw = str(render_settings.get("transition_sound", "")).strip()
             bgm_volume = float(render_settings.get("bg_music_volume", 0.25) or 0.0)
+            transition_sfx_volume = float(render_settings.get("transition_sound_volume", transition_sfx_volume) or transition_sfx_volume)
             CONFIG["audio_bitrate_kbps"] = int(render_settings.get("audio_bitrate_kbps", CONFIG["audio_bitrate_kbps"]) or CONFIG["audio_bitrate_kbps"])
             CONFIG["custom_audio_gain_db"] = float(render_settings.get("custom_audio_gain_db", CONFIG["custom_audio_gain_db"]) or CONFIG["custom_audio_gain_db"])
             CONFIG["font_family"] = str(render_settings.get("font_family", CONFIG["font_family"]) or CONFIG["font_family"]).strip().lower()
+            transition_type_raw = str(render_settings.get("transition_type", CONFIG.get("transition_type", "fade")) or "fade").strip().lower()
+            if transition_type_raw in {"fade", "slideleft"}:
+                CONFIG["transition_type"] = transition_type_raw
+            question_entry_effect_raw = str(render_settings.get("question_entry_effect", CONFIG.get("question_entry_effect", "fade")) or "fade").strip().lower()
+            if question_entry_effect_raw in {"fade", "slideleft"}:
+                CONFIG["question_entry_effect"] = question_entry_effect_raw
+            choices_entry_effect_raw = str(render_settings.get("choices_entry_effect", CONFIG.get("choices_entry_effect", "fade")) or "fade").strip().lower()
+            if choices_entry_effect_raw in {"fade", "slideleft"}:
+                CONFIG["choices_entry_effect"] = choices_entry_effect_raw
+            timer_type_raw = str(render_settings.get("timer_type", CONFIG.get("timer_type", "classic_bar")) or "classic_bar").strip().lower()
+            if timer_type_raw in {"classic_bar", "countdown_circle"}:
+                CONFIG["timer_type"] = timer_type_raw
+            layout_type_raw = str(render_settings.get("layout_type", layout_type) or layout_type).strip().lower()
+            if layout_type_raw in {"classic_2_choice", "single_image"}:
+                layout_type = layout_type_raw
             ad_positions = render_settings.get("ad_insert_after", ad_insert_after)
             if isinstance(ad_positions, list):
                 # sanitize to ints >=1
@@ -878,6 +1063,9 @@ def main():
             if bgm_raw:
                 bgm_candidate = Path(bgm_raw)
                 bgm_audio = bgm_candidate if bgm_candidate.is_absolute() else (ROOT / bgm_candidate).resolve()
+            if transition_sfx_raw:
+                sfx_candidate = Path(transition_sfx_raw)
+                transition_sfx = sfx_candidate if sfx_candidate.is_absolute() else (ROOT / sfx_candidate).resolve()
         except Exception:
             # Keep defaults if settings cannot be parsed.
             pass
@@ -913,23 +1101,38 @@ def main():
     for idx, q in enumerate(questions):
         qid = q.get("id", f"q{idx+1}")
         question = q["question"].strip()
-        a = q["a"]
-        b = q["b"]
-        a_text = a.get("text", "").strip()
-        b_text = b.get("text", "").strip()
+        a_text = ""
+        b_text = ""
+        a_img = mock_choice_a
+        b_img = mock_choice_b
+        single_img = mock_choice_a
+        if layout_type == "single_image":
+            single_img_raw = q.get("image", "")
+            if not single_img_raw:
+                single_img_raw = q.get("a", {}).get("image", str(input_images_dir / f"{qid}_image.png"))
+            single_img = Path(single_img_raw)
+            if not single_img.is_absolute():
+                single_img = (ROOT / single_img).resolve()
+            if not single_img.exists() and mock_choice_a.exists():
+                single_img = mock_choice_a
+        else:
+            a = q.get("a", {})
+            b = q.get("b", {})
+            a_text = a.get("text", "").strip()
+            b_text = b.get("text", "").strip()
 
-        a_img = Path(a.get("image", str(input_images_dir / f"{qid}_a.png")))
-        b_img = Path(b.get("image", str(input_images_dir / f"{qid}_b.png")))
-        if not a_img.is_absolute():
-            a_img = (ROOT / a_img).resolve()
-        if not b_img.is_absolute():
-            b_img = (ROOT / b_img).resolve()
+            a_img = Path(a.get("image", str(input_images_dir / f"{qid}_a.png")))
+            b_img = Path(b.get("image", str(input_images_dir / f"{qid}_b.png")))
+            if not a_img.is_absolute():
+                a_img = (ROOT / a_img).resolve()
+            if not b_img.is_absolute():
+                b_img = (ROOT / b_img).resolve()
 
-        # Fallback to repo-level mock images only if question-specific images do not exist.
-        if not a_img.exists() and mock_choice_a.exists():
-            a_img = mock_choice_a
-        if not b_img.exists() and mock_choice_b.exists():
-            b_img = mock_choice_b
+            # Fallback to repo-level mock images only if question-specific images do not exist.
+            if not a_img.exists() and mock_choice_a.exists():
+                a_img = mock_choice_a
+            if not b_img.exists() and mock_choice_b.exists():
+                b_img = mock_choice_b
 
         voice_text = q.get("voice_text")
         if not voice_text:
@@ -976,7 +1179,18 @@ def main():
         base_png = bases_dir / f"{qid}.png"
         question_layer_png = bases_dir / f"{qid}_question.png"
         choices_layer_png = bases_dir / f"{qid}_choices.png"
-        build_base_image(base_png, question_layer_png, choices_layer_png, question, a_text, b_text, a_img, b_img)
+        build_base_image(
+            base_png,
+            question_layer_png,
+            choices_layer_png,
+            question,
+            layout_type,
+            a_text,
+            b_text,
+            a_img,
+            b_img,
+            single_img,
+        )
 
         out_mp4 = seg_dir / f"{qid}.mp4"
         voice_gain_db_for_question = float(CONFIG["custom_audio_gain_db"]) if is_custom_audio else float(CONFIG["voice_gain_db"])
@@ -1007,10 +1221,18 @@ def main():
 
     final_out = output_dir / "final_9x16.mp4"
     final_no_bgm = output_dir / "final_9x16_no_bgm.mp4"
+    final_with_sfx = output_dir / "final_9x16_with_sfx.mp4"
     transition_seconds = float(CONFIG.get("transition_seconds", 0.0))
     transition_type = str(CONFIG.get("transition_type", "fade"))
-    concat_with_transitions(seg_paths, final_no_bgm, transition_seconds, transition_type)
-    add_background_music(final_no_bgm, bgm_audio if bgm_audio else Path("__missing__"), final_out, bgm_volume)
+    q_to_q_offsets = concat_with_transitions(seg_paths, final_no_bgm, transition_seconds, transition_type)
+    add_transition_sfx(
+        final_no_bgm,
+        transition_sfx if transition_sfx else Path("__missing__"),
+        final_with_sfx,
+        q_to_q_offsets,
+        transition_sfx_volume,
+    )
+    add_background_music(final_with_sfx, bgm_audio if bgm_audio else Path("__missing__"), final_out, bgm_volume)
     print(f"Wrote: {final_out}")
 
 
