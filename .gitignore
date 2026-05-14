@@ -43,3 +43,5 @@ input_images/
 # *.jpeg
 # *.webp
 # *.ttf
+input_audio/
+input_images/

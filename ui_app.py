@@ -91,6 +91,7 @@ with st.expander("Video Klip Ayarlari (Dinamik)", expanded=True):
     transition_sound_volume_current = max(0.0, min(2.0, transition_sound_volume_current))
     bgm_volume_current = float(render_settings.get("bg_music_volume", 0.25) or 0.0)
     bgm_volume_current = max(0.0, min(1.5, bgm_volume_current))
+    # fixed audio normalization and gain defaults baked in; no UI controls
     ad_after_positions = render_settings.get("ad_insert_after", [3])
     st.caption(f"Mevcut giris videosu: {intro_current}")
     intro_upload = st.file_uploader("Giris Videosu Yukle (mp4)", type=["mp4"], key="intro_video_upload")
@@ -101,9 +102,15 @@ with st.expander("Video Klip Ayarlari (Dinamik)", expanded=True):
     st.caption(f"Mevcut arka plan sarkisi: {bgm_current if bgm_current else 'yok'}")
     bgm_upload = st.file_uploader("Arka Plan Sarkisi Yukle (mp3/wav/m4a)", type=["mp3", "wav", "m4a"], key="bgm_upload")
     bgm_volume = st.slider("Arka Plan Sesi (volume)", min_value=0.0, max_value=1.5, value=bgm_volume_current, step=0.01)
-    font_options = {"Rubik": "rubik", "BRLNS": "brlns"}
+    # loudness and gains are fixed in code for best output; keeping UI simple
+    font_options = {"Rubik": "rubik", "BRLNS": "brlns", "Luckiest Guy": "luckiestguy"}
     font_labels = list(font_options.keys())
-    default_font_label = "Rubik" if font_family_current != "brlns" else "BRLNS"
+    if font_family_current == "brlns":
+        default_font_label = "BRLNS"
+    elif font_family_current == "luckiestguy":
+        default_font_label = "Luckiest Guy"
+    else:
+        default_font_label = "Rubik"
     font_label = st.selectbox("Font Secimi", font_labels, index=font_labels.index(default_font_label))
     font_family = font_options[font_label]
     layout_options = {
@@ -168,9 +175,34 @@ with st.expander("Video Klip Ayarlari (Dinamik)", expanded=True):
     if transition_sound_label != "Yok":
         transition_sound = f"gecis_sounds/{transition_sound_label}"
 
+    # Arka plan görüntüsü (bg_images klasöründen seçim)
+    bg_images_dir = ROOT / "bg_images"
+    bg_files = []
+    if bg_images_dir.exists():
+        for ext in ("*.png", "*.PNG", "*.jpg", "*.JPG", "*.jpeg", "*.JPEG", "*.webp", "*.WEBP"):
+            bg_files.extend(list(bg_images_dir.glob(ext)))
+    bg_files = sorted({p.name for p in bg_files})
+    current_bg_rel = str(render_settings.get("background_image", "") or "").replace("\\", "/")
+    current_bg_name = Path(current_bg_rel).name if current_bg_rel else ""
+    if current_bg_name and current_bg_name not in bg_files:
+        current_bg_name = ""
+    default_bg_name = current_bg_name
+    if not default_bg_name:
+        # Varsayilan bg: bg.png varsa onu sec
+        default_bg_name = "bg.png" if "bg.png" in bg_files else (bg_files[0] if bg_files else "")
+    bg_select_label = "Arka Plan Görseli (bg_images klasörü)"
+    if bg_files:
+        bg_label = st.selectbox(bg_select_label, ["(Yok)"] + bg_files, index=(["(Yok)"] + bg_files).index(default_bg_name) if default_bg_name else 0)
+    else:
+        st.warning("bg_images klasöründe uygun görsel bulunamadı. Varsayılan pastel arka plan kullanılacak.")
+        bg_label = "(Yok)"
+    background_image_rel = ""
+    if bg_label != "(Yok)":
+        background_image_rel = f"bg_images/{bg_label}"
+
     intro_path = intro_current
     ad_path = ad_current
-    outro_path = outro_current
+    outro_path = ""
     bgm_path = bgm_current
     # Reklam ekleme noktaları: Soru sayisina gore Q1->Q2 ... listesi
     total_q = max(1, len(questions))
@@ -214,6 +246,7 @@ with st.expander("Video Klip Ayarlari (Dinamik)", expanded=True):
         "choices_entry_effect": choices_entry_effect,
         "transition_sound": transition_sound,
         "transition_sound_volume": transition_sound_volume,
+        "background_image": background_image_rel,
     }
 
 col_top_1, col_top_2, col_top_3 = st.columns([1, 1, 2])

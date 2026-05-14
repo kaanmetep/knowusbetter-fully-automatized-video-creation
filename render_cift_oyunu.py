@@ -45,8 +45,8 @@ CONFIG = {
         "timer": {"x": 120, "y": 90, "w": 840, "h": 22},
         "question_box": {"x": 80, "y": 220, "w": 920, "h": 320},
         "single_image": {
-            "question_box": {"x": 80, "y": 220, "w": 920, "h": 300},
-            "image_box": {"x": 220, "y": 600, "w": 640, "h": 700},
+            "question_box": {"x": 80, "y": 460, "w": 920, "h": 360},
+            "image_box": {"x": 220, "y": 840, "w": 640, "h": 620},
         },
         "choices": {
             "a": {
@@ -84,13 +84,23 @@ CONFIG = {
     "ad_transition_type": "slideleft",
     "ad_transition_seconds": 0.35,
     # Voice (question) audio gain
-    "voice_gain_db": 7.0,
+	"voice_gain_db": 9.0,
     # Final AAC bitrate (higher = better quality, larger file size).
     "audio_bitrate_kbps": 192,
+	# BGM fade out duration at the end of final video
+	"bgm_fade_out_seconds": 6.0,
+	# Loudness normalization (EBU R128) for question audio
+	"loudnorm_enabled": True,
+	"loudnorm_i": -14.0,
+	"loudnorm_tp": -1.0,
+	"loudnorm_lra": 11.0,
+	# Final output gain and limiter
+	"final_gain_db": 1.2,
+	"final_limit_dbfs": -0.9,
     # When user provides custom question audio (mp3/wav/etc), we don't know
     # its loudness level; applying default gain can cause clipping.
     # Set to 0.0 to keep the source as-is.
-    "custom_audio_gain_db": 0.0,
+	"custom_audio_gain_db": 2.0,
     "font_family": "rubik",
     "elevenlabs": {
         "api_url": "https://api.elevenlabs.io/v1/text-to-speech/{voice_id}",
@@ -238,7 +248,6 @@ def normalize_clip_to_standard(in_path: Path, out_path: Path):
         f"pad={w}:{h}:(ow-iw)/2:(oh-ih)/2,"
         f"fps={fps},format=yuv420p"
     )
-    # -shortest keeps things safe if audio/video lengths mismatch after processing
     run(
         [
             "ffmpeg",
@@ -280,6 +289,21 @@ def add_background_music(video_in: Path, bgm_in: Path, video_out: Path, bgm_volu
         )
         return
 
+    total_dur = ffprobe_duration_seconds(video_in)
+    fade_dur = float(CONFIG.get("bgm_fade_out_seconds", 6.0))
+    fade_dur = max(0.0, fade_dur)
+    fade_start = max(0.0, total_dur - fade_dur)
+
+    # Compute limiter threshold (linear) from dBFS setting
+    try:
+        final_limit_dbfs = float(CONFIG.get("final_limit_dbfs", -0.9))
+    except Exception:
+        final_limit_dbfs = -0.9
+    # clamp to reasonable range [-6.0, -0.1] dBFS
+    final_limit_dbfs = max(-6.0, min(-0.1, final_limit_dbfs))
+    limit_linear = 10 ** (final_limit_dbfs / 20.0)
+    final_gain_db = float(CONFIG.get("final_gain_db", 0.0))
+
     run(
         [
             "ffmpeg",
@@ -289,7 +313,9 @@ def add_background_music(video_in: Path, bgm_in: Path, video_out: Path, bgm_volu
             "-i",
             str(bgm_in),
             "-filter_complex",
-            f"[1:a]volume={bgm_volume}[bgm];[0:a][bgm]amix=inputs=2:duration=first:dropout_transition=0[a]",
+            f"[1:a]aformat=sample_rates=44100:channel_layouts=mono,volume={bgm_volume},afade=t=out:st={fade_start}:d={fade_dur}[bgm];"
+            f"[0:a][bgm]amix=inputs=2:duration=first:dropout_transition=0[am];"
+            f"[am]alimiter=limit={limit_linear:.4f},volume={final_gain_db}dB[a]",
             "-map",
             "0:v",
             "-map",
@@ -369,6 +395,10 @@ def get_font(size: int, bold: bool = False):
             ROOT / ("BRLNSB.TTF" if bold else "BRLNSR.TTF"),
             ROOT / ("BRLNSR.TTF" if bold else "BRLNSB.TTF"),
         ]
+    elif font_family == "luckiestguy":
+        primary = [
+            ROOT / "LuckiestGuy-Regular.ttf",
+        ]
     else:
         primary = [
             ROOT / "Rubik-VariableFont_wght.ttf",
@@ -377,11 +407,14 @@ def get_font(size: int, bold: bool = False):
 
     candidates = [
         *primary,
+        ROOT / "LuckiestGuy-Regular.ttf",
         ROOT / "assets" / "fonts" / "font.ttf",
         ROOT / ("BRLNSB.TTF" if bold else "BRLNSR.TTF"),
         ROOT / ("BRLNSR.TTF" if bold else "BRLNSB.TTF"),
         ROOT / "Rubik-VariableFont_wght.ttf",
         ROOT / "Rubik-Italic-VariableFont_wght.ttf",
+        Path(r"C:\Windows\Fonts\LuckiestGuy-Regular.ttf"),
+        Path(r"C:\Windows\Fonts\LuckiestGuy.ttf"),
         Path(r"C:\Windows\Fonts\LuckiestGuy-Regular.ttf"),
         Path(r"C:\Windows\Fonts\LuckiestGuy.ttf"),
         Path(r"C:\Windows\Fonts\Montserrat-ExtraBold.ttf"),
@@ -411,6 +444,8 @@ def get_ffmpeg_fontfile() -> str:
     candidates = []
     if font_family == "brlns":
         candidates.extend([ROOT / "BRLNSB.TTF", ROOT / "BRLNSR.TTF"])
+    elif font_family == "luckiestguy":
+        candidates.extend([ROOT / "LuckiestGuy-Regular.ttf", Path(r"C:\Windows\Fonts\LuckiestGuy-Regular.ttf"), Path(r"C:\Windows\Fonts\LuckiestGuy.ttf")])
     else:
         candidates.extend([ROOT / "Rubik-VariableFont_wght.ttf", ROOT / "Rubik-Italic-VariableFont_wght.ttf"])
     candidates.extend(
@@ -419,6 +454,9 @@ def get_ffmpeg_fontfile() -> str:
             ROOT / "BRLNSR.TTF",
             ROOT / "Rubik-VariableFont_wght.ttf",
             ROOT / "Rubik-Italic-VariableFont_wght.ttf",
+            ROOT / "LuckiestGuy-Regular.ttf",
+            Path(r"C:\Windows\Fonts\LuckiestGuy-Regular.ttf"),
+            Path(r"C:\Windows\Fonts\LuckiestGuy.ttf"),
             Path(r"C:\Windows\Fonts\arialbd.ttf"),
             Path(r"C:\Windows\Fonts\arial.ttf"),
         ]
@@ -572,6 +610,7 @@ def build_base_image(
     question_box = CONFIG["layout"]["question_box"]
     if layout_type == "single_image":
         question_box = CONFIG["layout"]["single_image"]["question_box"]
+        font_q = get_font(72)
     draw_wrapped(
         qdraw,
         font_q,
@@ -627,7 +666,27 @@ def build_base_image(
         left = (new_w - iw) // 2
         top = (new_h - ih) // 2
         im = im.crop((left, top, left + iw, top + ih))
-        layer_img.paste(im, (int(ib["x"]), int(ib["y"])))
+        radius = max(8, int(min(iw, ih) * 0.035))
+        border_w = max(2, int(min(iw, ih) * 0.007))
+        border_color = (255, 255, 255, 105)
+
+        mask = Image.new("L", (iw, ih), 0)
+        mdraw = ImageDraw.Draw(mask)
+        mdraw.rounded_rectangle((0, 0, iw - 1, ih - 1), radius=radius, fill=255)
+
+        rounded = Image.new("RGBA", (iw, ih), (0, 0, 0, 0))
+        rounded.paste(im.convert("RGBA"), (0, 0), mask)
+
+        bdraw = ImageDraw.Draw(rounded)
+        inset = max(1, border_w // 2)
+        bdraw.rounded_rectangle(
+            (inset, inset, iw - 1 - inset, ih - 1 - inset),
+            radius=max(1, radius - inset),
+            outline=border_color,
+            width=border_w,
+        )
+
+        layer_img.paste(rounded, (int(ib["x"]), int(ib["y"])), rounded)
 
     # Choices are rendered into a single transparent layer so we can reveal them together.
     choices_layer = Image.new("RGBA", (w, h), (0, 0, 0, 0))
@@ -727,6 +786,22 @@ def convert_any_audio_to_wav(in_audio: Path, out_wav: Path):
     )
 
 
+def loudnorm_audio(in_wav: Path, out_wav: Path, i: float, tp: float, lra: float):
+    out_wav.parent.mkdir(parents=True, exist_ok=True)
+    run(
+        [
+            "ffmpeg",
+            "-y",
+            "-i",
+            str(in_wav),
+            "-af",
+            f"loudnorm=I={i}:TP={tp}:LRA={lra}:print_format=summary,aresample=44100,aformat=channel_layouts=mono",
+            "-c:a",
+            "pcm_s16le",
+            str(out_wav),
+        ]
+    )
+
 def elevenlabs_tts_to_wav(
     voice_id: str,
     model_id: str,
@@ -802,11 +877,15 @@ def make_question_segment(
     audio_dur: float,
     clock_mp3,
     voice_gain_db: float,
+    layout_type: str = "classic_2_choice",
 ):
     timer_seconds = float(CONFIG["timer_seconds"])
     w, h = CONFIG["w"], CONFIG["h"]
     fps = int(CONFIG["fps"])
-    bar = CONFIG["layout"]["timer"]
+    bar = dict(CONFIG["layout"]["timer"])
+    if layout_type == "single_image":
+        qb = CONFIG["layout"]["single_image"]["question_box"]
+        bar["y"] = max(0, int(qb["y"] - 140))
     timer_type = str(CONFIG.get("timer_type", "classic_bar") or "classic_bar").strip().lower()
 
     start = float(audio_dur)
@@ -891,39 +970,66 @@ def make_question_segment(
                 f"drawbox=x={bar['x']}:y={bar['y']}:w={fill_w:.3f}:h={bar['h']}:color={fill_hex}:thickness=fill:enable='between(t,{t0:.4f},{t1 + epsilon:.4f})'"
             )
 
-    timer_part = f"[0:v]{','.join(vfilters)}[timer];"
-    question_part = (
-        f"[2:v]format=rgba,"
-        f"fade=t=in:st=0:d={question_fade_d}:alpha=1[qn];"
-    )
-    if question_entry_effect == "slideleft":
-        qx_expr = f"lte(t\\,{question_slide_d})*({question_slide_d}-t)/{question_slide_d}*(-{question_slide_px})"
-        overlay_part = f"[timer][qn]overlay=x={qx_expr}:y=0:format=auto[qtv];"
-    else:
-        slide_expr = f"lte(t\\,{question_slide_d})*({question_slide_d}-t)/{question_slide_d}*18"
-        overlay_part = f"[timer][qn]overlay=x=0:y={slide_expr}:format=auto[qtv];"
-
+    # Compose layers; for single_image, draw timer last so it stays visible above the image.
     choices_fade_d = float(CONFIG.get("choices_fade_seconds", 0.35))
     choices_lead = float(CONFIG.get("choices_lead_seconds", 0.25))
     choices_start = max(0.0, start - choices_lead)
     choices_entry_effect = str(CONFIG.get("choices_entry_effect", "fade") or "fade").strip().lower()
     choices_slide_d = float(CONFIG.get("choices_slide_seconds", choices_fade_d))
     choices_slide_px = float(CONFIG.get("choices_slide_px", 120))
-    choices_part = (
-        f"[3:v]format=rgba,"
-        f"fade=t=in:st={choices_start}:d={choices_fade_d}:alpha=1[cn];"
-    )
-    if choices_entry_effect == "slideleft":
-        choices_end = choices_start + choices_slide_d
-        cx_expr = (
-            f"(-{choices_slide_px})*lte(t\\,{choices_start})+"
-            f"(-{choices_slide_px}+{choices_slide_px}*(t-{choices_start})/{choices_slide_d})*gte(t\\,{choices_start})*lte(t\\,{choices_end})"
+    if layout_type == "single_image":
+        base_part = "[0:v]"
+        question_part = (
+            f"[2:v]format=rgba,"
+            f"fade=t=in:st=0:d={question_fade_d}:alpha=1[qn];"
         )
-        overlay_part2 = f"[qtv][cn]overlay=x={cx_expr}:y=0:format=auto[vid]"
+        if question_entry_effect == "slideleft":
+            qx_expr = f"lte(t\\,{question_slide_d})*({question_slide_d}-t)/{question_slide_d}*(-{question_slide_px})"
+            overlay_q = f"{base_part}[qn]overlay=x={qx_expr}:y=0:format=auto[qtv];"
+        else:
+            slide_expr = f"lte(t\\,{question_slide_d})*({question_slide_d}-t)/{question_slide_d}*18"
+            overlay_q = f"{base_part}[qn]overlay=x=0:y={slide_expr}:format=auto[qtv];"
+        choices_part = (
+            f"[3:v]format=rgba,"
+            f"fade=t=in:st={choices_start}:d={choices_fade_d}:alpha=1[cn];"
+        )
+        if choices_entry_effect == "slideleft":
+            choices_end = choices_start + choices_slide_d
+            cx_expr = (
+                f"(-{choices_slide_px})*lte(t\\,{choices_start})+"
+                f"(-{choices_slide_px}+{choices_slide_px}*(t-{choices_start})/{choices_slide_d})*gte(t\\,{choices_start})*lte(t\\,{choices_end})"
+            )
+            overlay_c = f"[qtv][cn]overlay=x={cx_expr}:y=0:format=auto[bgl]"
+        else:
+            overlay_c = f"[qtv][cn]overlay=x=0:y=0:format=auto[bgl]"
+        timer_part = f"[bgl]{','.join(vfilters)}[vid]"
+        v_part = f"{question_part}{overlay_q}{choices_part}{overlay_c};{timer_part}"
     else:
-        overlay_part2 = f"[qtv][cn]overlay=x=0:y=0:format=auto[vid]"
-
-    v_part = f"{timer_part}{question_part}{overlay_part}{choices_part}{overlay_part2}"
+        timer_part = f"[0:v]{','.join(vfilters)}[timer];"
+        question_part = (
+            f"[2:v]format=rgba,"
+            f"fade=t=in:st=0:d={question_fade_d}:alpha=1[qn];"
+        )
+        if question_entry_effect == "slideleft":
+            qx_expr = f"lte(t\\,{question_slide_d})*({question_slide_d}-t)/{question_slide_d}*(-{question_slide_px})"
+            overlay_part = f"[timer][qn]overlay=x={qx_expr}:y=0:format=auto[qtv];"
+        else:
+            slide_expr = f"lte(t\\,{question_slide_d})*({question_slide_d}-t)/{question_slide_d}*18"
+            overlay_part = f"[timer][qn]overlay=x=0:y={slide_expr}:format=auto[qtv];"
+        choices_part = (
+            f"[3:v]format=rgba,"
+            f"fade=t=in:st={choices_start}:d={choices_fade_d}:alpha=1[cn];"
+        )
+        if choices_entry_effect == "slideleft":
+            choices_end = choices_start + choices_slide_d
+            cx_expr = (
+                f"(-{choices_slide_px})*lte(t\\,{choices_start})+"
+                f"(-{choices_slide_px}+{choices_slide_px}*(t-{choices_start})/{choices_slide_d})*gte(t\\,{choices_start})*lte(t\\,{choices_end})"
+            )
+            overlay_part2 = f"[qtv][cn]overlay=x={cx_expr}:y=0:format=auto[vid]"
+        else:
+            overlay_part2 = f"[qtv][cn]overlay=x=0:y=0:format=auto[vid]"
+        v_part = f"{timer_part}{question_part}{overlay_part}{choices_part}{overlay_part2}"
 
     if clock_mp3 and clock_mp3.exists():
         offset_ms = int(round(start * 1000))
@@ -1027,11 +1133,12 @@ def main():
             outro_raw = str(render_settings.get("outro_video", "")).strip()
             bgm_raw = str(render_settings.get("bg_music", "")).strip()
             transition_sfx_raw = str(render_settings.get("transition_sound", "")).strip()
+            bg_image_raw = str(render_settings.get("background_image", "")).strip()
             bgm_volume = float(render_settings.get("bg_music_volume", 0.25) or 0.0)
             transition_sfx_volume = float(render_settings.get("transition_sound_volume", transition_sfx_volume) or transition_sfx_volume)
             CONFIG["audio_bitrate_kbps"] = int(render_settings.get("audio_bitrate_kbps", CONFIG["audio_bitrate_kbps"]) or CONFIG["audio_bitrate_kbps"])
-            CONFIG["custom_audio_gain_db"] = float(render_settings.get("custom_audio_gain_db", CONFIG["custom_audio_gain_db"]) or CONFIG["custom_audio_gain_db"])
             CONFIG["font_family"] = str(render_settings.get("font_family", CONFIG["font_family"]) or CONFIG["font_family"]).strip().lower()
+            CONFIG["bgm_fade_out_seconds"] = float(render_settings.get("bg_music_fade_out_seconds", CONFIG.get("bgm_fade_out_seconds", 6.0)) or CONFIG.get("bgm_fade_out_seconds", 6.0))
             transition_type_raw = str(render_settings.get("transition_type", CONFIG.get("transition_type", "fade")) or "fade").strip().lower()
             if transition_type_raw in {"fade", "slideleft"}:
                 CONFIG["transition_type"] = transition_type_raw
@@ -1047,6 +1154,14 @@ def main():
             layout_type_raw = str(render_settings.get("layout_type", layout_type) or layout_type).strip().lower()
             if layout_type_raw in {"classic_2_choice", "single_image"}:
                 layout_type = layout_type_raw
+            if bg_image_raw:
+                # Accept absolute or repo-relative path
+                CONFIG["background_image"] = str(Path(bg_image_raw))
+            else:
+                # No explicit setting; prefer bg_images/bg.png if available
+                preferred = ROOT / "bg_images" / "bg.png"
+                if preferred.exists():
+                    CONFIG["background_image"] = str((preferred.relative_to(ROOT)).as_posix())
             ad_positions = render_settings.get("ad_insert_after", ad_insert_after)
             if isinstance(ad_positions, list):
                 # sanitize to ints >=1
@@ -1174,6 +1289,16 @@ def main():
                 mock_mp3=mock_mp3,
             )
 
+        # Always apply loudness normalization for question audio (fixed best-practice settings)
+        ln_i = float(CONFIG.get("loudnorm_i", -14.0))
+        ln_tp = float(CONFIG.get("loudnorm_tp", -1.0))
+        ln_lra = float(CONFIG.get("loudnorm_lra", 11.0))
+        ln_key = sha256_str(f"ln|{audio_wav.name}|{ln_i}|{ln_tp}|{ln_lra}")
+        audio_wav_ln = audio_cache_dir / f"{qid}_{ln_key}.wav"
+        if not audio_wav_ln.exists() or audio_wav_ln.stat().st_size == 0:
+            loudnorm_audio(audio_wav, audio_wav_ln, ln_i, ln_tp, ln_lra)
+        audio_wav = audio_wav_ln
+
         audio_dur = ffprobe_duration_seconds(audio_wav)
 
         base_png = bases_dir / f"{qid}.png"
@@ -1203,6 +1328,7 @@ def main():
             audio_dur,
             clock_mp3=clock_mp3,
             voice_gain_db=voice_gain_db_for_question,
+            layout_type=layout_type,
         )
         seg_paths.append(out_mp4)
 

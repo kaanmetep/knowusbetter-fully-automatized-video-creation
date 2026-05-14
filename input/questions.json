@@ -1,7 +1,7 @@
 [
   {
     "id": "q1",
-    "question": "İlişkide hangisi daha önemli: geçmiş mi gelecek mi?",
+    "question": "Sevgilim özel şeyleri arkadaşlarına anlatabilir",
     "voice_text": "",
     "audio": "input_audio/q1.mp3",
     "a": {
@@ -12,11 +12,11 @@
       "text": "Geçmiş",
       "image": "input_images/q1_b.jpg"
     },
-    "image": "input_images/q1_image.png"
+    "image": "input_images/q1_image.jpg"
   },
   {
     "id": "q2",
-    "question": "Hangisi seni daha çok rahatsız eder: sevgilin aşırı açık sözlü olursa mı, yoksa duygularını bazen saklarsa mı?",
+    "question": "Sevgilim Dm’den gelen mesajlara cevap verebilir",
     "voice_text": "",
     "audio": "input_audio/q2.mp3",
     "a": {
@@ -27,6 +27,6 @@
       "text": "Duygularını Saklarsa",
       "image": "input_images/q2_b.jpg"
     },
-    "image": "input_images/q2_image.png"
+    "image": "input_images/q2_image.jpg"
   }
 ]

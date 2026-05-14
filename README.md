@@ -10,16 +10,16 @@ Currently, the script retrieves audio files manually, but it can be extended to 
 - optional: `ELEVENLABS_MODEL_ID` env (if using api, -not tested-)
 
 ## installatin
-```powershell
+
 py -m pip install -r requirements.txt
 setx ELEVENLABS_API_KEY "YOUR_KEY_HERE"
 setx ELEVENLABS_VOICE_ID "YOUR_VOICE_ID_HERE"
-```
+
 
 ## Run
-```powershell
-py render_cift_oyunu.py
-```
+
+python -m streamlit run ui_app.py 
+
 
 output will be:
 - `output/final_9x16.mp4`
